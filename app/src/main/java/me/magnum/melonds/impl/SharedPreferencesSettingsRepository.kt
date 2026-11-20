@@ -370,6 +370,7 @@ class SharedPreferencesSettingsRepository(
             lowLatencyEnabled = preferences.getBoolean("video_low_latency", false),
             rtcOffsetMinutes = preferences.getInt("rtc_offset_minutes", 0).coerceIn(-1440, 1440),
             wfcSettingsPath = preferences.getString("wfc_settings_file", null),
+            micGain = preferences.getInt("mic_gain", 1).coerceIn(1, 10),
         )
     }
 
@@ -699,23 +700,20 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun getVulkanDriverConfiguration(nativeLibraryDir: String): VulkanDriverConfiguration {
-        val selectedDriver = getSelectedVulkanDriver()?.withResolvedRuntimePath()
-        val requestedMode = getVulkanDriverMode()
-        val useCustomDriver = requestedMode == VulkanDriverMode.CUSTOM &&
-            selectedDriver != null &&
-            AdrenoVulkanDriverSupport.isSupported(context)
+        val selectedDriver = if (getVulkanDriverMode() == VulkanDriverMode.CUSTOM &&
+            AdrenoVulkanDriverSupport.supportsCustomDrivers(context)) {
+            getSelectedVulkanDriver()?.withResolvedRuntimePath()
+        } else null
         val tmpDir = File(context.cacheDir, "adrenotools/tmp").apply { mkdirs() }
 
         return VulkanDriverConfiguration(
-            mode = if (useCustomDriver) VulkanDriverMode.CUSTOM else VulkanDriverMode.SYSTEM,
+            mode = if (selectedDriver != null) VulkanDriverMode.CUSTOM else VulkanDriverMode.SYSTEM,
             tmpLibDir = tmpDir.absolutePath,
             hookLibDir = nativeLibraryDir,
-            customDriverDir = selectedDriver
-                ?.takeIf { useCustomDriver }
-                ?.driverDir
+            customDriverDir = selectedDriver?.driverDir
                 ?.let { if (it.endsWith(File.separator)) it else it + File.separator },
-            customDriverName = selectedDriver?.takeIf { useCustomDriver }?.driverName,
-            customDriverDisplayName = selectedDriver?.takeIf { useCustomDriver }?.displayName,
+            customDriverName = selectedDriver?.driverName,
+            customDriverDisplayName = selectedDriver?.displayName,
         )
     }
 
@@ -821,17 +819,10 @@ class SharedPreferencesSettingsRepository(
         return getInstalledVulkanDrivers().firstOrNull { it.id == selectedId }
     }
 
-    private fun VulkanDriverInfo.withResolvedRuntimePath(): VulkanDriverInfo {
-        if (File(driverDir, driverName).isFile) {
-            return this
-        }
-
-        val repairedDriverFile = File(context.filesDir, "adreno-drivers")
-            .walkTopDown()
-            .firstOrNull { it.isFile && it.name == driverName }
-            ?: return this
-
-        return copy(driverDir = repairedDriverFile.parentFile?.absolutePath ?: driverDir)
+    private fun VulkanDriverInfo.withResolvedRuntimePath(): VulkanDriverInfo? {
+        val library = AdrenoVulkanDriverManager.resolveInstalledLibrary(File(context.filesDir, "adreno-drivers"), this)
+            ?: return null
+        return copy(driverDir = library.parent ?: return null)
     }
 
     private fun parseVulkanDrivers(text: String): List<VulkanDriverInfo> {
@@ -1953,7 +1944,7 @@ class SharedPreferencesSettingsRepository(
             renderer = renderer,
             videoFiltering = effectiveFiltering,
             threadedRendering = threadedRendering,
-            internalResolutionScaling = romConfig.internalResolutionScaling ?: baseConfiguration.resolutionScaling,
+            internalResolutionScaling = romConfig.internalResolutionScaling ?: baseConfiguration.internalResolutionScaling,
             retroArchShader = if (effectiveFiltering == VideoFiltering.RETROARCH) retroArchShader else EmptyRetroArchShaderConfiguration,
         )
     }

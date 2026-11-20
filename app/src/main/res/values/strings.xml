@@ -38,6 +38,7 @@
     <string name="size_gb">GB</string>
 
     <string name="error_rom_not_found">Could not find ROM</string>
+    <string name="rom_metadata_unavailable">Could not read this game. Check that the file is accessible and contains a valid DS ROM.</string>
     <string name="error_rom_not_found_info">The ROM you have selected has not been found. Make sure the selected ROM can be found in the current ROM search directory.\n%1$s</string>
     <string name="error_load_rom">Could not load ROM</string>
     <string name="error_load_rom_message">There was a problem loading the ROM. Make sure it\'s not corrupted and try again.</string>
@@ -143,6 +144,7 @@
     <string name="no_image_selected">No image selected</string>
     <string name="failed_to_load_image">Failed to load image</string>
     <string name="emulator_stop_gba_mode_unsupported">GBA mode is not supported</string>
+    <string name="emulator_stop_wireless_unsupported">This wireless mode is not supported in this multiplayer room.</string>
     <string name="emulator_stop_internal_error">An error was encountered during the ROM\'s execution</string>
 
     <string name="action_sort_alphabetically">Alphabetically</string>
@@ -375,12 +377,12 @@
     <string name="video_vulkan_drs">Dynamic internal resolution</string>
     <string name="video_vulkan_drs_summary">The game targets the selected internal resolution, but under heavy load it renders at a lower internal resolution to keep a stable 60 fps. While enabled, Frameskip is off.</string>
     <string name="frameskip_mode_disabled_by_drs">DRS is active; to use Frameskip, disable dynamic internal resolution in Video settings.</string>
-    <string name="video_vulkan_driver_mode">Adreno Vulkan driver</string>
+    <string name="video_vulkan_driver_mode">Graphics driver</string>
     <string name="video_vulkan_driver_import">Import custom driver</string>
     <string name="video_vulkan_driver_import_summary">Install a driver ZIP. Changes apply the next time a game starts.</string>
     <string name="video_vulkan_driver_remove">Remove custom driver</string>
     <string name="video_vulkan_driver_remove_summary">Delete installed custom drivers.</string>
-    <string name="video_vulkan_driver_unsupported">Custom drivers require an Adreno GPU, the GitHub arm64 build, and Android 9 or newer.</string>
+    <string name="video_vulkan_driver_unsupported">Custom drivers require the GitHub arm64 build and Android 9 or newer.</string>
     <string name="video_vulkan_driver_no_custom">Import a custom driver before selecting this option.</string>
     <string name="video_vulkan_driver_active_system">Using Android system Vulkan driver.</string>
     <string name="video_vulkan_driver_active_custom">Using %1$s when Vulkan starts.</string>
@@ -434,6 +436,8 @@
     <string name="audio_mute_on_fast_forward_summary">No sound while fast forward is active</string>
     <string name="audio_latency">Audio latency</string>
     <string name="microphone_source">Microphone source</string>
+    <string name="device_microphone_gain">Device microphone gain</string>
+    <string name="device_microphone_gain_summary">1× keeps the original level. Increase for quiet microphones.</string>
     <string name="controller_layout">Layouts</string>
     <string name="category_save_files">Save Files</string>
     <string name="category_save_files_summary">Save file &amp; save state locations</string>
@@ -506,7 +510,7 @@
     <string name="enable_cheats">Enable cheats</string>
     <string name="cheats_database">Cheats database (XML format)</string>
     <string name="import_cheats">Import cheats</string>
-    <string name="import_cheats_summary">Import cheats from database files to make them available. Only XML databases are supported for now. Any previously imported cheat will be deleted.</string>
+    <string name="import_cheats_summary">Import XML or usrcheat.dat databases. A successful import replaces previously imported cheats and keeps your custom cheats.</string>
     <string name="rom_shortcut">ROM shortcut</string>
 
     <string name="firmware_nickname">Nickname</string>
@@ -951,6 +955,8 @@
         <item>Rumble Pak</item>
         <item>Memory expansion</item>
         <item>Analog Input</item>
+        <item>Motion Pak (Homebrew)</item>
+        <item>Motion Pak (Retail)</item>
     </string-array>
 
     <string-array name="console_type_options">
@@ -1011,6 +1017,13 @@
     <string name="video_retroarch_shader_root_title">RetroArch shader root</string>
     <string name="video_retroarch_shader_root_summary">Select the top-level slang-shaders folder so presets can resolve sibling shader, include, and LUT folders.</string>
     <string name="video_retroarch_shader_preset_title">Shader</string>
+    <string name="video_dslite_preset_title">DS Lite presets</string>
+    <string name="video_dslite_preset_summary">DS Lite colors with optional LCD grid and motion blur</string>
+    <string name="video_dslite_color">DS Lite color</string>
+    <string name="video_dslite_lcd">DS Lite color + LCD grid</string>
+    <string name="video_dslite_motionblur">DS Lite color + LCD grid + motion blur</string>
+    <string name="video_dslite_download">These presets use the official shader library. Download or update it now?</string>
+    <string name="video_dslite_unavailable">This preset is missing from the installed shader library. Try updating the library.</string>
     <string name="video_retroarch_shader_preset_summary">None selected. Pick one from the shader library.</string>
     <string name="video_retroarch_shader_parameters_title">RetroArch preset parameters</string>
     <string name="video_retroarch_shader_parameters_summary">Optional overrides, for example curvature=0.25,mask_strength=0.6.</string>
@@ -1189,4 +1202,7 @@
     <string name="dsi_profile_make_default">Set as default</string>
     <string name="dsi_profile_missing">Profile unavailable</string>
     <string name="dsi_profile_remove_description">Remove this profile from settings? Its files will remain. Games assigned to it will need another profile before they can start.</string>
+    <string name="video_vulkan_driver_import_other_gpu">Install a Vulkan driver ZIP built for your GPU. If the driver cannot be opened, the emulator uses the system driver.</string>
+    <string name="hint_search_cheats">Search cheats</string>
+    <string name="no_cheats_found_from_search">No matching cheats</string>
 </resources>

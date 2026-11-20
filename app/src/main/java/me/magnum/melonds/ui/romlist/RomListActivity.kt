@@ -225,6 +225,10 @@ class RomListActivity : AppCompatActivity() {
                     viewModel.cycleFilter(forward = true)
                     return true
                 }
+                KeyEvent.KEYCODE_BUTTON_SELECT -> {
+                    if (event.repeatCount == 0) openMultiplayer()
+                    return true
+                }
             }
         }
         return super.dispatchKeyEvent(event)
@@ -243,7 +247,6 @@ class RomListActivity : AppCompatActivity() {
     override fun onStart() {
         super.onStart()
         viewModel.refreshInstalledDsiWareShortcuts()
-        externalInfoController.attach()
         externalInfoController.setContent {
             val highlighted = highlightedRom.collectAsState().value
             val browser = viewModel.browserState.collectAsState().value
@@ -268,9 +271,14 @@ class RomListActivity : AppCompatActivity() {
         }
     }
 
-    override fun onStop() {
+    override fun onResume() {
+        super.onResume()
+        externalInfoController.attach()
+    }
+
+    override fun onPause() {
         externalInfoController.detach()
-        super.onStop()
+        super.onPause()
     }
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
@@ -336,6 +344,10 @@ class RomListActivity : AppCompatActivity() {
                 launchFirmware(ConsoleType.DSi)
                 return true
             }
+            R.id.action_multiplayer -> {
+                startActivity(Intent(this, me.magnum.melonds.multiplayer.MultiplayerActivity::class.java))
+                return true
+            }
             R.id.action_dsiware_manager -> {
                 val intent = Intent(this, DSiWareManagerActivity::class.java)
                 startActivity(intent)
@@ -356,6 +368,11 @@ class RomListActivity : AppCompatActivity() {
 
     internal fun bootFirmware(consoleType: ConsoleType) {
         launchFirmware(consoleType)
+    }
+
+    internal fun openMultiplayer(join: String? = null) {
+        startActivity(Intent(this, me.magnum.melonds.multiplayer.MultiplayerActivity::class.java)
+            .putExtra(me.magnum.melonds.multiplayer.MultiplayerActivity.EXTRA_JOIN, join))
     }
 
     internal fun openDsiWareManager() {

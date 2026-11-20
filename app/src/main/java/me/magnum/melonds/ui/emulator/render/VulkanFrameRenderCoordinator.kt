@@ -299,6 +299,16 @@ class VulkanFrameRenderCoordinator(
                     }
                 }
             }
+
+            val pendingSurfaces = synchronized(surfacesLock) {
+                managedSurfaces.mapNotNull { (surfaceView, managedSurface) ->
+                    managedSurface.pendingSurface?.let { surfaceView to it }
+                }
+            }
+            pendingSurfaces.forEach { (surfaceView, surface) ->
+                val (width, height) = surfaceView.getCurrentSurfaceSize()
+                attachSurface(surfaceView, surface, width, height)
+            }
         }
 
         private fun getActiveHandler(): Handler? {
@@ -611,16 +621,13 @@ class VulkanFrameRenderCoordinator(
             }
         }
 
-        private fun finishPacingPermit(
-            permitId: Long,
-            expectedControlEpoch: Long,
-            consumed: Boolean,
-        ) {
+        private fun finishPacingPermit(permit: PacingPermit, consumed: Boolean) {
             synchronized(pacingLock) {
                 val currentPermit = pendingPacingPermit
-                if (currentPermit?.permitId == permitId
-                    && currentPermit.controlEpoch == expectedControlEpoch
-                    && controlEpoch == expectedControlEpoch
+                if (currentPermit?.permitId == permit.permitId
+                    && currentPermit.controlEpoch == permit.controlEpoch
+                    && controlEpoch == permit.controlEpoch
+                    && (!consumed || currentPermit.vsyncSequence == permit.vsyncSequence)
                 ) {
                     currentPermit.consumed = consumed
                     pendingPacingPermit = null
@@ -660,8 +667,7 @@ class VulkanFrameRenderCoordinator(
                 val renderStartNs = System.nanoTime()
                 val waitEpoch = permit.nativeWaitEpoch ?: run {
                     finishPacingPermit(
-                        permit.permitId,
-                        permit.controlEpoch,
+                        permit,
                         consumed = false,
                     )
                     return
@@ -680,7 +686,7 @@ class VulkanFrameRenderCoordinator(
                     MelonEmulator.VulkanPresentationResult.PRESENTED,
                     MelonEmulator.VulkanPresentationResult.NO_SURFACE,
                     -> {
-                        finishPacingPermit(permit.permitId, permit.controlEpoch, consumed = true)
+                        finishPacingPermit(permit, consumed = true)
                         if (MelonEmulator.isLowLatencyEnabled
                             && presentationResult == MelonEmulator.VulkanPresentationResult.PRESENTED
                             && !MelonEmulator.isFastForwardEnabled()
@@ -695,7 +701,7 @@ class VulkanFrameRenderCoordinator(
                             return
                         }
                         val waitEpoch = permit.nativeWaitEpoch ?: run {
-                            finishPacingPermit(permit.permitId, permit.controlEpoch, consumed = false)
+                            finishPacingPermit(permit, consumed = false)
                             return
                         }
                         val waitResult = MelonEmulator.waitForVulkanPresentationProduct(
@@ -714,7 +720,7 @@ class VulkanFrameRenderCoordinator(
                             MelonEmulator.VulkanPresentationWaitResult.GENERATION_CHANGED,
                             MelonEmulator.VulkanPresentationWaitResult.STOPPED,
                             -> {
-                                finishPacingPermit(permit.permitId, permit.controlEpoch, consumed = false)
+                                finishPacingPermit(permit, consumed = false)
                                 return
                             }
                         }
@@ -729,7 +735,7 @@ class VulkanFrameRenderCoordinator(
                     MelonEmulator.VulkanPresentationResult.STOPPED,
                     MelonEmulator.VulkanPresentationResult.FATAL_ERROR,
                     -> {
-                        finishPacingPermit(permit.permitId, permit.controlEpoch, consumed = false)
+                        finishPacingPermit(permit, consumed = false)
                         return
                     }
                 }

@@ -1,3 +1,6 @@
+#include "MultiplayerSession.h"
+#include "EmulationThreadCpuPolicy.h"
+#include "ThreadLifecycleScope.h"
 #include <EGL/egl.h>
 #include <EGL/eglext.h>
 #include <GLES3/gl3.h>
@@ -43,8 +46,10 @@
 #include "renderer/VulkanFilterMode.h"
 #include "performancehint/ThreadSafePerformanceHintSession.h"
 #include "performancehint/PerformanceHintManagerFactory.h"
+#include "performancehint/PerformanceHintWorker.h"
 
 #include "Platform.h"
+#include "WMService.h"
 
 #ifndef MELONDS_ANDROID_DEBUG_BUILD
 #define MELONDS_ANDROID_DEBUG_BUILD 0
@@ -56,6 +61,8 @@ enum GbaSlotType {
     RUMBLE_PAK = 2,
     MEMORY_EXPANSION = 3,
     ANALOG_INPUT = 4,
+    MOTION_PAK_HOMEBREW = 5,
+    MOTION_PAK_RETAIL = 6,
 };
 
 void* emulate(void*);
@@ -859,6 +866,7 @@ static const int64_t FRAME_DURATION_1000FPS_NS = 1000000; // 1ms. Used as frame 
 ThreadSafePerformanceHintSession* performanceHintSession = nullptr;
 
 static std::mutex performanceHintSessionLock;
+static std::vector<pid_t> performanceHintWorkers;
 
 int sanitizeFrameskipMode(int mode)
 {
@@ -872,6 +880,7 @@ int sanitizeFrameskipManualValue(int value)
 
 float sanitizeFrameLimitSpeedMultiplier(float multiplier)
 {
+    if (MelonDSAndroid::Multiplayer::Active()) return 1.0f;
     if (multiplier < 0.25f)
         return 0.25f;
     if (multiplier > 1.0f)
@@ -941,6 +950,24 @@ static void registrarHiloEnHints()
 }
 
 namespace MelonDSAndroid { extern void (*hookRegistrarHiloHints)(); }
+
+void MelonDSAndroid::setPerformanceHintWorkerActive(bool active)
+{
+    std::lock_guard<std::mutex> lock(performanceHintSessionLock);
+    const pid_t thread = gettid();
+    const auto found = std::find(performanceHintWorkers.begin(), performanceHintWorkers.end(), thread);
+    if (active) {
+        if (found != performanceHintWorkers.end()) return;
+        performanceHintWorkers.push_back(thread);
+        if (performanceHintSession != nullptr)
+            performanceHintSession->registerThread(thread, currentPerformanceHintTargetNs());
+    } else {
+        if (found == performanceHintWorkers.end()) return;
+        performanceHintWorkers.erase(found);
+        if (performanceHintSession != nullptr)
+            performanceHintSession->unregisterThread(thread, currentPerformanceHintTargetNs());
+    }
+}
 
 extern "C"
 {
@@ -1904,11 +1931,7 @@ Java_me_magnum_melonds_MelonEmulator_presentVulkanFrameNative(
     jlong expectedWaitEpoch)
 {
 
-    static thread_local bool hintsRegistrados = false;
-    if (!hintsRegistrados) {
-        hintsRegistrados = true;
-        registrarHiloEnHints();
-    }
+    static thread_local melonDS::ThreadLifecycleScope hints(MelonDSAndroid::setPerformanceHintWorkerActive);
     const auto toDeadlineTime = [](jlong value) -> std::optional<std::chrono::time_point<std::chrono::steady_clock>> {
         if (value <= 0)
             return std::nullopt;
@@ -2946,6 +2969,12 @@ Java_me_magnum_melonds_MelonEmulator_takeScreenshot(JNIEnv* env, jobject thiz)
 }
 
 JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_updateMotionData(JNIEnv*, jobject, jfloat ax, jfloat ay, jfloat az, jfloat rx, jfloat ry, jfloat rz)
+{
+    MelonDSAndroid::updateMotionData(ax, ay, az, rx, ry, rz);
+}
+
+JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setSlot2AnalogInput(JNIEnv* env, jobject thiz, jfloat x, jfloat y)
 {
     MelonDSAndroid::setSlot2AnalogInput(x, y);
@@ -2954,7 +2983,7 @@ Java_me_magnum_melonds_MelonEmulator_setSlot2AnalogInput(JNIEnv* env, jobject th
 JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject thiz, jboolean enabled)
 {
-    const bool fastForwardEnabled = enabled == JNI_TRUE;
+    const bool fastForwardEnabled = enabled == JNI_TRUE && !MelonDSAndroid::Multiplayer::Active();
     const bool wasFastForwardEnabled = isFastForwardEnabled.exchange(
         fastForwardEnabled,
         std::memory_order_acq_rel);
@@ -3075,6 +3104,12 @@ MelonDSAndroid::RomGbaSlotConfig* buildGbaSlotConfig(GbaSlotType slotType, const
     {
         return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigMemoryExpansion;
     }
+    else if (slotType == GbaSlotType::MOTION_PAK_HOMEBREW || slotType == GbaSlotType::MOTION_PAK_RETAIL)
+    {
+        return new MelonDSAndroid::RomGbaSlotConfig{
+            slotType == GbaSlotType::MOTION_PAK_RETAIL ? MelonDSAndroid::MOTION_PAK_RETAIL : MelonDSAndroid::MOTION_PAK_HOMEBREW
+        };
+    }
     else if (slotType == GbaSlotType::ANALOG_INPUT)
     {
         return (MelonDSAndroid::RomGbaSlotConfig*) new MelonDSAndroid::RomGbaSlotConfigAnalogInput;
@@ -3172,6 +3207,7 @@ private:
 
 void* emulate(void*)
 {
+    MelonDSAndroid::EmulationThreadCpuPolicy cpuPolicy;
     FrameTimingRecorder frameTiming;
     double startTick = getCurrentMillis();
     double lastTick = startTick;
@@ -3202,7 +3238,7 @@ void* emulate(void*)
     {
         std::lock_guard<std::mutex> lock(performanceHintSessionLock);
         performanceHintSession = new ThreadSafePerformanceHintSession(std::move(manager));
-        performanceHintSession->createSession(gettid(), FRAME_DURATION_60FPS_NS);
+        performanceHintSession->createSession(gettid(), FRAME_DURATION_60FPS_NS, performanceHintWorkers);
         performanceHintSession->updateTargetWorkDuration(currentPerformanceHintTargetNs());
         MelonDSAndroid::hookRegistrarHiloHints = registrarHiloEnHints;
         __android_log_print(ANDROID_LOG_INFO, "melonDS",
@@ -3215,8 +3251,10 @@ void* emulate(void*)
         bool pauseAfterCurrentFrame = false;
         bool boundedFrameRun = false;
         bool serviceRetroAchievementsWhilePaused = false;
+        bool resumedFromPause = false;
         pthread_mutex_lock(&emuThreadMutex);
         if (paused) {
+            cpuPolicy.setActive(false);
             isThreadReallyPaused = true;
             while (
                 paused && !stop &&
@@ -3238,9 +3276,7 @@ void* emulate(void*)
 
             if (!serviceRetroAchievementsWhilePaused)
             {
-                frameTiming.resumed();
-                frameLimitError = 0;
-                lastTick = getCurrentMillis();
+                resumedFromPause = true;
                 isThreadReallyPaused = false;
                 frameskipSolicitado = false;
                 frameskipInhibidoFotogramas = 2;
@@ -3265,20 +3301,53 @@ void* emulate(void*)
             continue;
         }
 
+        if (resumedFromPause)
+        {
+            if (!boundedFrameRun)
+                MelonDSAndroid::reconcileAudioOutputRunStateOnce();
+            pthread_mutex_lock(&emuThreadMutex);
+            const bool resumeCanceled = paused || stop.load(std::memory_order_acquire);
+            pthread_mutex_unlock(&emuThreadMutex);
+            if (resumeCanceled)
+                continue;
+            frameTiming.resumed();
+            frameLimitError = 0;
+            lastTick = getCurrentMillis();
+        }
+
+        const bool multiplayerActive = MelonDSAndroid::Multiplayer::Active();
+        cpuPolicy.setActive(multiplayerActive);
         const bool recordFrameTiming = frameTiming.active();
         const uint64_t timingCpuStart = recordFrameTiming ? FrameTimingRecorder::threadCpuNs() : 0;
         auto frameStart = std::chrono::steady_clock::now();
         int timingFrame = -1;
 
+        bool wifiClient = false;
         u32 nLines = 0;
+        u64 wmWaitUS = 0;
         {
             std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
             frameskipSolicitadoEsteFrame = frameskipSolicitado;
+            u64 wmFrameDeadline = 0;
+            if (multiplayerActive && limitFps.load(std::memory_order_relaxed)
+                && !boundedFrameRun && !isFastForwardEnabled.load(std::memory_order_relaxed))
+            {
+                const auto budgetClock = std::chrono::steady_clock::now();
+                const double remainingMs = lastTick + frameLimitError
+                    + 1000.0 / targetFps.load(std::memory_order_relaxed) - getCurrentMillis();
+                if (remainingMs > 0.0)
+                    wmFrameDeadline = std::chrono::duration_cast<std::chrono::microseconds>(
+                        budgetClock.time_since_epoch()).count() + static_cast<u64>(remainingMs * 1000.0);
+            }
+            const u64 wmWaitBefore = multiplayerActive ? melonDS::WMService::ThreadWaitTimeUS() : 0;
             nLines = MelonDSAndroid::loop(frameskipSolicitado,
                                          frameskipMode.load(std::memory_order_acquire),
                                          frameskipManualValue.load(std::memory_order_acquire),
                                          vulkanDrsEnabled.load(std::memory_order_acquire),
-                                         drsDeuda);
+                                         drsDeuda, wmFrameDeadline);
+            if (multiplayerActive)
+                wmWaitUS = melonDS::WMService::ThreadWaitTimeUS() - wmWaitBefore;
+            wifiClient = MelonDSAndroid::isWifiClient();
             drsDeuda = false;
             frameskipConcedidoEsteFrame = MelonDSAndroid::frameskipConcedidoUltimoFrame();
 
@@ -3313,7 +3382,7 @@ void* emulate(void*)
         if (frameTimeStep < 1)
             frameTimeStep = 1;
 
-        if (limitFps)
+        if (limitFps && !wifiClient)
         {
 
             if (!isFastForwardEnabled.load(std::memory_order_acquire))
@@ -3359,6 +3428,8 @@ void* emulate(void*)
                 frameskipSolicitado = nLines > 0
                     && frameskipInhibidoFotogramas == 0
                     && !ffActivo
+                    && (!wmWaitUS || std::chrono::duration<double, std::milli>(frameDuration).count()
+                                        - static_cast<double>(wmWaitUS) / 1000.0 > frameTimeStep)
                     && frameLimitError <= -(frameTimeStep * 0.5);
 
             if (round(frameLimitError) > 0.0)
@@ -3367,7 +3438,14 @@ void* emulate(void*)
                     .tv_sec = 0,
                     .tv_nsec = (long) (frameLimitError * 1000000),
                 };
-                clock_nanosleep(CLOCK_MONOTONIC, 0, &sleepTime, nullptr);
+                bool deferred = false;
+                if (multiplayerActive && !boundedFrameRun && !ffActivo)
+                {
+                    std::lock_guard<std::mutex> coreLock(emulationCoreAccessMutex);
+                    deferred = MelonDSAndroid::deferMultiplayerFrameWait(sleepTime.tv_nsec / 1000);
+                }
+                if (!deferred)
+                    clock_nanosleep(CLOCK_MONOTONIC, 0, &sleepTime, nullptr);
                 double timeAfterSleep = getCurrentMillis();
                 frameLimitError -= timeAfterSleep - currentTick;
                 currentTick = timeAfterSleep;
@@ -3384,7 +3462,7 @@ void* emulate(void*)
                 | (frameskipConcedidoEsteFrame ? 2u : 0u)
                 | (isFastForwardEnabled.load(std::memory_order_relaxed) ? 4u : 0u)
                 | (vulkanDrsEnabled.load(std::memory_order_relaxed) ? 8u : 0u)
-                | (limitFps.load(std::memory_order_relaxed) ? 16u : 0u)
+                | (limitFps.load(std::memory_order_relaxed) && !wifiClient ? 16u : 0u)
                 | (static_cast<unsigned>(frameskipMode.load(std::memory_order_relaxed)) << 8u);
             frameTiming.add({timingFrame, frameTiming.currentSegment(), nLines,
                 MelonDSAndroid::getVulkanRenderedInternalResolution(),
@@ -3414,6 +3492,7 @@ void* emulate(void*)
         }
     }
 
+    cpuPolicy.setActive(false);
     {
         std::lock_guard<std::mutex> lock(performanceHintSessionLock);
         MelonDSAndroid::hookRegistrarHiloHints = nullptr;
@@ -3425,5 +3504,5 @@ void* emulate(void*)
     }
 
     MelonDSAndroid::stop();
-    pthread_exit(NULL);
+    return nullptr;
 }

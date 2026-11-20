@@ -66,6 +66,28 @@ constexpr u32 kMaxRetroArchNativeDisplayScale = 8u;
 constexpr size_t kPrewarmedRetroArchSurfaceCount = 3u;
 std::atomic<u64> gNextPresenterEpoch{1};
 
+template <typename Operation>
+VkResult waitForConsumptionWithHostService(Operation&& operation, u64 timeoutNs,
+    void (*hostService)(void*), void* hostContext)
+{
+    if (!hostService || !timeoutNs) return operation(timeoutNs);
+    const u64 started = PerfNowNs();
+    u64 remaining = timeoutNs;
+    for (;;)
+    {
+        const VkResult result = operation(std::min<u64>(remaining, 200000));
+        if (result != VK_TIMEOUT) return result;
+        if (timeoutNs != UINT64_MAX && PerfNowNs() - started >= timeoutNs) return result;
+        hostService(hostContext);
+        if (timeoutNs != UINT64_MAX)
+        {
+            const u64 elapsed = PerfNowNs() - started;
+            if (elapsed >= timeoutNs) return VK_TIMEOUT;
+            remaining = timeoutNs - elapsed;
+        }
+    }
+}
+
 VkSurfaceTransformFlagBitsKHR chooseSurfaceTransform(const VkSurfaceCapabilitiesKHR& capabilities)
 {
     return (capabilities.currentTransform == VK_SURFACE_TRANSFORM_IDENTITY_BIT_KHR
@@ -1193,7 +1215,8 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
     const VulkanCompositionInputs& inputs,
     u64 gpuWaitTimeoutNs,
     u64 timeoutNs,
-    const VulkanCausalWaitRunner& waitRunner)
+    const VulkanCausalWaitRunner& waitRunner,
+    const VulkanSurfaceSubmitRunner& submitRunner)
 {
     if (!initialized)
         return VulkanPresentationResult::Stopped;
@@ -1882,15 +1905,17 @@ VulkanPresentationResult VulkanSurfacePresenter::presentFrame(
         u64 surfacePresentTimelineValue = 0;
         bool queueSubmitSucceeded = false;
         bool presentAccepted = false;
-        const bool submitSucceeded = submitSurfaceCommands(
-            surfaceState,
-            imageIndex,
-            sourceReadySemaphore,
-            sourceReadyValue,
-            surfacePresentCpuNs,
-            surfacePresentTimelineValue,
-            queueSubmitSucceeded,
-            presentAccepted);
+        const bool submitSucceeded = submitRunner([&] {
+            return submitSurfaceCommands(
+                surfaceState,
+                imageIndex,
+                sourceReadySemaphore,
+                sourceReadyValue,
+                surfacePresentCpuNs,
+                surfacePresentTimelineValue,
+                queueSubmitSucceeded,
+                presentAccepted);
+        });
         if (queueSubmitSucceeded)
         {
             submittedAnySurface = true;
@@ -2269,7 +2294,9 @@ bool VulkanSurfacePresenter::waitForPresentQueueRecovery(
 
 bool VulkanSurfacePresenter::waitForPresentFenceToken(
     PresentConsumptionToken& token,
-    u64 timeoutNs)
+    u64 timeoutNs,
+    void (*hostService)(void*),
+    void* hostContext)
 {
     const bool slotIndexValid = token.fenceSlot < presentFenceSlots.size();
     PresentFenceSlot* slot = slotIndexValid
@@ -2307,12 +2334,9 @@ bool VulkanSurfacePresenter::waitForPresentFenceToken(
     if (traceEnabled)
         ATrace_beginSection("melonDS::VulkanPresenter::vkWaitForFences");
     const u64 waitStartNs = PerfNowNs();
-    const VkResult waitResult = vkWaitForFences(
-        device,
-        1,
-        &slot->fence,
-        VK_TRUE,
-        timeoutNs);
+    const VkResult waitResult = waitForConsumptionWithHostService(
+        [&](u64 interval) { return vkWaitForFences(device, 1, &slot->fence, VK_TRUE, interval); },
+        timeoutNs, hostService, hostContext);
     const u64 waitElapsedNs = PerfNowNs() - waitStartNs;
     if (traceEnabled)
         ATrace_endSection();
@@ -2370,7 +2394,8 @@ bool VulkanSurfacePresenter::getFrameConsumptionDependency(const Frame* frame, V
     return true;
 }
 
-bool VulkanSurfacePresenter::waitForFrameConsumption(Frame* frame, u64 timeoutNs)
+bool VulkanSurfacePresenter::waitForFrameConsumption(Frame* frame, u64 timeoutNs,
+    void (*hostService)(void*), void* hostContext)
 {
     if (frame == nullptr)
         return true;
@@ -2404,7 +2429,7 @@ bool VulkanSurfacePresenter::waitForFrameConsumption(Frame* frame, u64 timeoutNs
         return waitForPresentQueueRecovery(token);
 
     if (token.kind == PresentConsumptionKind::Fence)
-        return waitForPresentFenceToken(token, timeoutNs);
+        return waitForPresentFenceToken(token, timeoutNs, hostService, hostContext);
 
     if (token.kind != PresentConsumptionKind::Timeline
         || token.timelineValue == 0
@@ -2426,7 +2451,9 @@ bool VulkanSurfacePresenter::waitForFrameConsumption(Frame* frame, u64 timeoutNs
     waitInfo.pSemaphores = &timelineSemaphore;
     waitInfo.pValues = &token.timelineValue;
 
-    const VkResult waitResult = waitSemaphores(device, &waitInfo, timeoutNs);
+    const VkResult waitResult = waitForConsumptionWithHostService(
+        [&](u64 interval) { return waitSemaphores(device, &waitInfo, interval); },
+        timeoutNs, hostService, hostContext);
     if (waitResult == VK_SUCCESS)
     {
         token.clear();

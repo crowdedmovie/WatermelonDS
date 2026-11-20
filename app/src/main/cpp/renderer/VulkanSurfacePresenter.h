@@ -105,6 +105,7 @@ enum class VulkanCausalWaitResult : u8
 };
 
 using VulkanCausalWaitOperation = std::function<bool()>;
+using VulkanSurfaceSubmitRunner = std::function<bool(const VulkanCausalWaitOperation&)>;
 using VulkanCausalWaitRunner = std::function<VulkanCausalWaitResult(
     const char* traceName,
     const VulkanCausalWaitOperation& operation)>;
@@ -174,8 +175,10 @@ public:
         const VulkanCompositionInputs& inputs,
         u64 gpuWaitTimeoutNs,
         u64 timeoutNs,
-        const VulkanCausalWaitRunner& waitRunner);
-    bool waitForFrameConsumption(Frame* frame, u64 timeoutNs = UINT64_MAX);
+        const VulkanCausalWaitRunner& waitRunner,
+        const VulkanSurfaceSubmitRunner& submitRunner);
+    bool waitForFrameConsumption(Frame* frame, u64 timeoutNs = UINT64_MAX,
+        void (*hostService)(void*) = nullptr, void* hostContext = nullptr);
     bool getFrameConsumptionDependency(const Frame* frame, VkSemaphore& semaphore, u64& value);
     void invalidateDescriptorCaches();
     VulkanPresenterPacingStats takePacingStatsSnapshotAndReset();
@@ -405,7 +408,8 @@ private:
     bool createSyncObjects();
     void destroySyncObjects();
     bool submitPresentFenceMarker(PresentConsumptionToken& token);
-    bool waitForPresentFenceToken(PresentConsumptionToken& token, u64 timeoutNs);
+    bool waitForPresentFenceToken(PresentConsumptionToken& token, u64 timeoutNs,
+        void (*hostService)(void*), void* hostContext);
     bool waitForPresentQueueRecovery(PresentConsumptionToken& token);
 
     bool createSurfaceStateResources(SurfaceState& surfaceState);

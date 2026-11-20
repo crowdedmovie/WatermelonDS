@@ -151,6 +151,8 @@ namespace MelonDSAndroid {
      */
     extern int loadRom(std::string romPath, std::string sramPath, RomGbaSlotConfig* gbaSlotConfig);
     extern int bootFirmware();
+    extern bool isWifiClient();
+    extern bool deferMultiplayerFrameWait(u64 delay);
     extern bool precompileVulkanPipelines(const VulkanSurfaceConfig& retroArchConfig);
     extern void touchScreen(u16 x, u16 y);
     extern void releaseScreen();
@@ -159,10 +161,11 @@ namespace MelonDSAndroid {
     extern void abortExactLiveGuide(std::uint32_t reason);
     extern void pressKey(u32 key);
     extern void releaseKey(u32 key);
+    extern void updateMotionData(float ax, float ay, float az, float rx, float ry, float rz);
     extern void setSlot2AnalogInput(float x, float y);
     extern void start();
 
-    extern u32 loop(bool frameskipSolicitado, int frameskipModo, int frameskipManualN, bool drsActivo, bool drsDeuda);
+    extern u32 loop(bool frameskipSolicitado, int frameskipModo, int frameskipManualN, bool drsActivo, bool drsDeuda, u64 wmFrameDeadline);
 
     extern bool frameskipConcedidoUltimoFrame();
 

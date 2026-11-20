@@ -40,12 +40,15 @@ public:
     ~MelonInstance();
 
     int getInstanceId() { return instanceId; };
+    bool isWifiClient() const;
+    bool deferMultiplayerFrameWait(melonDS::u64 delay);
     Renderer getCurrentRenderer() const { return currentRenderer; }
 
     bool loadRom(std::string romPath, std::string sramPath);
     bool loadGbaRom(std::string romPath, std::string sramPath);
     void loadRumblePak();
     void loadGbaMemoryExpansion();
+    void loadMotionPak(bool retail);
     void loadGbaAnalogInput();
     void loadGbaRumblePak();
     bool bootFirmware();
@@ -54,7 +57,7 @@ public:
     void reset();
     void requestRtcSync();
 
-    melonDS::u32 runFrame(bool frameskipSolicitado = false);
+    melonDS::u32 runFrame(bool frameskipSolicitado = false, melonDS::u64 wmFrameDeadline = 0);
 
     struct VulkanFrameskipStats
     {
@@ -94,6 +97,7 @@ public:
         bool drsMargenBloqueado;
     };
     [[nodiscard]] VulkanFrameskipStats getVulkanFrameskipStats() const noexcept;
+    void processProductTimingRequest();
 
     void configurarFrameskip(int modo, int manualN) noexcept;
 
@@ -117,6 +121,8 @@ public:
     void abortExactLiveGuide(std::uint32_t reason);
     void pressKey(u32 key);
     void releaseKey(u32 key);
+    void updateMotionData(float ax, float ay, float az, float rx, float ry, float rz);
+    float getMotionData(Platform::MotionQueryType type) const;
     void setSlot2AnalogInput(float x, float y);
     int readAudioOutputAdaptivo(
         s16* buffer, int length,
@@ -126,7 +132,7 @@ public:
     AudioOutputAdaptiveSnapshot getAudioOutputAdaptiveSnapshot() const noexcept;
     AudioOutputControllerSnapshot getAudioOutputControllerSnapshot() const noexcept;
     void setAudioOutputSpeedHint(double speed);
-    void configureAudioOutputTransport(std::uint32_t frames);
+    void configureAudioOutputTransport(std::uint32_t frames, bool lowLatency);
     void resetAudioOutputAdaptivo();
     bool takeScreenshot();
     std::vector<u32> getScreenshotPixels();
@@ -412,6 +418,8 @@ private:
     int instanceId;
     int consoleType;
     NDS* nds;
+    std::array<u8, 6> originalMultiplayerMac{};
+    bool multiplayerFirmwareIdentity = false;
     std::shared_ptr<Net> net;
 
     std::mutex retroAchievementsManagerLifetimeMutex;
@@ -420,6 +428,7 @@ private:
     std::unique_ptr<SaveManager> gbaSave;
     std::unique_ptr<SaveManager> firmwareSave;
     u32 inputMask;
+    std::array<std::atomic<float>, Platform::MotionRotationZ + 1> motionData{0.0f, 0.0f, 9.80665f, 0.0f, 0.0f, 0.0f};
     std::atomic<float> slot2AnalogX = 0.0f;
     std::atomic<float> slot2AnalogY = 0.0f;
 
@@ -435,6 +444,10 @@ private:
     u32 vulkanPresentationConcurrentTokenWaits = 0;
     std::unique_lock<std::mutex> acquireVulkanPresentationOperation();
     bool waitForVulkanPresentationConsumptionConcurrent(Frame* frame);
+    bool runVulkanPresentationOperationUnlocked(
+        std::unique_lock<std::mutex>& operationLock,
+        const char* traceName,
+        const VulkanCausalWaitOperation& operation);
     VulkanCausalWaitResult runVulkanPresentationWaitUnlocked(
         std::unique_lock<std::mutex>& operationLock,
         Frame* frame,
@@ -624,6 +637,24 @@ private:
     std::atomic<u32> vulkanPresenterRachaCopiasMax{0};
     std::atomic<u64> vulkanPresentacionesTotal{0};
     std::atomic<u64> vulkanPresentacionesProductoNuevo{0};
+    struct ProductTimingSample
+    {
+        u64 frameId;
+        u64 timeNs;
+        u32 kind;
+    };
+    static constexpr size_t ProductTimingCapacity = 16384;
+    std::vector<ProductTimingSample> productTimingSamples;
+    std::string productTimingRequest;
+    u64 productTimingToken = 0;
+    u64 productTimingStartNs = 0;
+    u64 productTimingStartPresentations = 0;
+    u64 productTimingStartProducts = 0;
+    u64 productTimingStartRenderSkipped = 0;
+    u64 productTimingStartFrame = 0;
+    u64 productTimingLost = 0;
+    bool productTimingActive = false;
+    void recordProductTiming(u64 frameId, u32 kind);
     u64 vulkanPresenterUltimoProductoId = 0;
 
     u32 vulkanFrameskipSaltosPorPantalla[2] = {0u, 0u};
@@ -649,7 +680,7 @@ private:
     PerfSampleWindow<120> vulkanQ4OtherWindow;
     PerfSampleWindow<120> vulkanQ4LockWaitWindow;
     PerfSampleWindow<120> vulkanQ4ConsumptionWindow;
-    bool vulkanQ4MeasureEnabled = false;
+    std::atomic<bool> vulkanQ4MeasureEnabled{false};
     PerfSampleWindow<120> vulkanQ4PumpHoldWindow;
     PerfSampleWindow<120> vulkanQ4PumpTotalWindow;
     PerfSampleWindow<120> vulkanQ4PumpUnlockedWindow;

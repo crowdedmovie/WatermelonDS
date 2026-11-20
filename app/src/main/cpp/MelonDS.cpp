@@ -33,6 +33,7 @@
 #include "net/Net_Slirp.h"
 #include <fstream>
 #include <mutex>
+#include "MultiplayerSession.h"
 
 #ifndef MELONDS_ANDROID_DEBUG_BUILD
 #define MELONDS_ANDROID_DEBUG_BUILD 0
@@ -710,6 +711,10 @@ namespace MelonDSAndroid
         {
             instance->loadGbaMemoryExpansion();
         }
+        else if (gbaSlotConfig->type == MOTION_PAK_HOMEBREW || gbaSlotConfig->type == MOTION_PAK_RETAIL)
+        {
+            instance->loadMotionPak(gbaSlotConfig->type == MOTION_PAK_RETAIL);
+        }
         else if (gbaSlotConfig->type == ANALOG_INPUT)
         {
             Platform::Log(Platform::LogLevel::Warn, "MelonDSAndroid: enabling Slot-2 analog input addon\n");
@@ -787,6 +792,12 @@ namespace MelonDSAndroid
             instance->releaseKey(key);
     }
 
+    void updateMotionData(float ax, float ay, float az, float rx, float ry, float rz)
+    {
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->updateMotionData(ax, ay, az, rx, ry, rz);
+    }
+
     void setSlot2AnalogInput(float x, float y)
     {
         if (instance)
@@ -806,14 +817,24 @@ namespace MelonDSAndroid
         markAudioOutputProducerStarted();
     }
 
-    u32 loop(bool frameskipSolicitado, int frameskipModo, int frameskipManualN, bool drsActivo, bool drsDeuda)
+    u32 loop(bool frameskipSolicitado, int frameskipModo, int frameskipManualN, bool drsActivo, bool drsDeuda, u64 wmFrameDeadline)
     {
         MPInterface::Get().Process();
         if (currentConfiguration != nullptr && currentConfiguration->renderer != Renderer::Vulkan)
             setupOpenGlContext();
         instance->configurarFrameskip(frameskipModo, frameskipManualN);
         instance->configurarDrs(drsActivo, drsDeuda);
-        return instance->runFrame(frameskipSolicitado);
+        return instance->runFrame(frameskipSolicitado, wmFrameDeadline);
+    }
+
+    bool deferMultiplayerFrameWait(u64 delay)
+    {
+        return instance && instance->deferMultiplayerFrameWait(delay);
+    }
+
+    bool isWifiClient()
+    {
+        return instance != nullptr && instance->isWifiClient();
     }
 
     bool frameskipConcedidoUltimoFrame()
@@ -834,6 +855,7 @@ namespace MelonDSAndroid
         auto currentInstance = GetInstanceSnapshot();
         if (!currentInstance)
             return "renderSkipped=0 presentaciones=0 productos=0 rachaCopiasMax=0 rachaCopias=0 modo=? manualN=0 drs=off";
+        currentInstance->processProductTimingRequest();
         const auto stats = currentInstance->getVulkanFrameskipStats();
         static const char* const nombresModo[3] = {"off", "manual", "auto"};
         static const char* const nombresMotivoDrs[] = {"ninguno", "deuda", "margen", "sonda", "sondaFallida", "deudaPersistente"};
@@ -1581,6 +1603,7 @@ namespace MelonDSAndroid
 
     void pauseAfterCurrentFramePublication()
     {
+        Multiplayer::Pause(true);
         auto currentInstance = GetInstanceSnapshot();
         if (currentInstance)
             currentInstance->finishCurrentFramePublicationThenSuspend();
@@ -1589,6 +1612,7 @@ namespace MelonDSAndroid
 
     void pause()
     {
+        Multiplayer::Pause(true);
         auto currentInstance = GetInstanceSnapshot();
         if (currentInstance)
             currentInstance->suspendFramePublication();
@@ -1597,6 +1621,7 @@ namespace MelonDSAndroid
 
     void resume()
     {
+        Multiplayer::Pause(false);
         resumeFramePublication();
         startAudio();
     }
@@ -1615,6 +1640,7 @@ namespace MelonDSAndroid
 
     bool saveState(const char* path)
     {
+        if (Multiplayer::Active()) return false;
         if (instance == nullptr)
         {
             Platform::Log(Platform::LogLevel::Warn, "Savestate save denied: emulator instance unavailable\n");
