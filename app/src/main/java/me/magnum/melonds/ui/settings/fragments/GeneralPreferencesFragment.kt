@@ -4,6 +4,8 @@ import android.os.Bundle
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatDelegate
+import androidx.core.os.LocaleListCompat
 import androidx.lifecycle.lifecycleScope
 import androidx.preference.ListPreference
 import androidx.preference.Preference
@@ -20,11 +22,15 @@ import kotlinx.coroutines.withContext
 import me.magnum.melonds.R
 import me.magnum.melonds.common.DirectoryAccessValidator
 import me.magnum.melonds.common.UriPermissionManager
+import me.magnum.melonds.domain.model.AppLanguageSettings
+import me.magnum.melonds.domain.model.PREF_KEY_APP_LANGUAGE
 import me.magnum.melonds.extensions.isSustainedPerformanceModeAvailable
 import me.magnum.melonds.impl.SettingsBackupManager
 import me.magnum.melonds.ui.common.LauncherIcon
 import me.magnum.melonds.ui.settings.PreferenceFragmentHelper
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
+import me.magnum.melonds.ui.settings.SettingsActivity
+import me.magnum.melonds.ui.settings.preferences.InGameLockedListPreference
 import me.magnum.melonds.ui.settings.preferences.StoragePickerPreference
 import me.magnum.melonds.extensions.addOnPreferenceChangeListener
 import javax.inject.Inject
@@ -37,6 +43,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
     @Inject lateinit var directoryAccessValidator: DirectoryAccessValidator
     @Inject lateinit var settingsBackupManager: SettingsBackupManager
 
+    private lateinit var appLanguagePreference: InGameLockedListPreference
     private lateinit var rewindPreference: MasterSwitchPreference
     private lateinit var frameLimitSpeedPreference: ListPreference
     private var iconUpdate: Job? = null
@@ -87,6 +94,35 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         setPreferencesFromResource(R.xml.pref_general, rootKey)
         addPreferencesFromResource(R.xml.pref_general_updates)
 
+        val launchedInGame = requireActivity().intent.getBooleanExtra(SettingsActivity.KEY_IN_GAME, false)
+        appLanguagePreference = findPreference(PREF_KEY_APP_LANGUAGE)!!
+        appLanguagePreference.apply {
+            entries = AppLanguageSettings.buildEntries(getString(R.string.app_language_system_default))
+            entryValues = AppLanguageSettings.buildEntryValues()
+            isInGameLocked = launchedInGame
+            inGameLockedMessageRes = R.string.app_language_cannot_change_ingame
+            setOnPreferenceChangeListener { _, newValue ->
+                if (launchedInGame) {
+                    return@setOnPreferenceChangeListener false
+                }
+                val currentLocales = AppCompatDelegate.getApplicationLocales()
+                val targetTag = AppLanguageSettings.toApplicationLocaleTags(newValue as? String)
+                val targetLocales = if (targetTag.isEmpty()) {
+                    LocaleListCompat.getEmptyLocaleList()
+                } else {
+                    LocaleListCompat.forLanguageTags(targetTag)
+                }
+                if (AppLanguageSettings.shouldApplyApplicationLocales(currentLocales.toLanguageTags(), targetTag) ||
+                    currentLocales != targetLocales
+                ) {
+                    AppCompatDelegate.setApplicationLocales(targetLocales)
+                }
+                updateAppLanguagePreferenceState(targetTag)
+                false
+            }
+        }
+        updateAppLanguagePreferenceState()
+
         rewindPreference = findPreference("enable_rewind")!!
         frameLimitSpeedPreference = findPreference("frame_limit_speed_multiplier")!!
         val sustainedPerformancePreference = findPreference<SwitchPreference>("enable_sustained_performance")!!
@@ -125,6 +161,7 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
 
     override fun onResume() {
         super.onResume()
+        updateAppLanguagePreferenceState()
         // Set proper value for Rewind preference since the value is not updated when returning from the fragment
         rewindPreference.onPreferenceChangeListener?.onPreferenceChange(rewindPreference, rewindPreference.sharedPreferences?.getBoolean(rewindPreference.key, false))
         updateFrameLimitSpeedPreferenceState()
@@ -175,6 +212,15 @@ class GeneralPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentT
         if (key == "ra_hardcore_enabled" || key == frameLimitSpeedPreference.key) {
             updateFrameLimitSpeedPreferenceState()
         }
+    }
+
+    private fun updateAppLanguagePreferenceState(selectedTagsOverride: String? = null) {
+        val activeTags = selectedTagsOverride ?: AppCompatDelegate.getApplicationLocales().toLanguageTags()
+        appLanguagePreference.value = AppLanguageSettings.resolvePreferenceValue(activeTags)
+        appLanguagePreference.summary = AppLanguageSettings.resolveDisplayLabel(
+            activeTags,
+            getString(R.string.app_language_system_default),
+        )
     }
 
     private fun updateFrameLimitSpeedPreferenceState() {
