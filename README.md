@@ -1,19 +1,40 @@
-# WatermelonDS
-A Nintendo DS and DSi emulator for Android, built on top of [melonDS](https://melonds.kuribo64.net/) and the
-[melonDS Android port](https://github.com/rafaelvcaetano/melonDS-android) by rafaelvcaetano.
+# WatermelonDS Fork
 
-WatermelonDS is a fork that keeps up with upstream while adding RetroAchievements (including offline play), a Vulkan
-renderer, RetroArch shader presets and full external display support, wrapped in its own visual identity.
+![Kotlin](https://img.shields.io/badge/Kotlin-2.3.21-7F52FF?logo=kotlin&logoColor=white)
+![C++17](https://img.shields.io/badge/C%2B%2B-17-00599C?logo=cplusplus&logoColor=white)
+![Android](https://img.shields.io/badge/Android-API%2024%2B-3DDC84?logo=android&logoColor=white)
+![License](https://img.shields.io/badge/License-GPL--3.0-blue)
 
+A personal fork of [SapphireRhodonite/WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS) (built on top of [melonDS](https://melonds.kuribo64.net/) and the [melonDS Android port](https://github.com/rafaelvcaetano/melonDS-android) by rafaelvcaetano).
 
+WatermelonDS adds RetroAchievements (including offline play), a Vulkan renderer, RetroArch shader presets, local multiplayer, and external display support. This fork tracks upstream while adding quality-of-life enhancements and builds side-by-side (`WatermelonDS Fork`, package `me.magnum.melondualds.nightly`) so you can keep it installed alongside the official release.
 
-[<img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png" alt="Get it on GitHub" height="80">](https://github.com/SapphireRhodonite/melonDS-android/releases/latest)
+[<img src="https://raw.githubusercontent.com/Kunzisoft/Github-badge/main/get-it-on-github.png" alt="Get it on GitHub" height="80">](https://github.com/crowdedmovie/WatermelonDS/releases)
 
 <p align="center">
    <img width="450" height="400" alt="WaterMelon1" src="https://github.com/user-attachments/assets/187ea254-877e-4efd-a8dd-93a6023684ad" />
    <img width="450" height="400" alt="WaterMelon1" src="https://github.com/user-attachments/assets/01e82877-a138-44a3-bc71-c24d48cabab6" />
    <img width="450" height="400" alt="WaterMelon1" src="https://github.com/user-attachments/assets/27868058-ce89-470d-afac-b812dea5d1de" />
 </p>
+
+
+# What this fork adds
+Built on top of upstream WatermelonDS (`0.8.0.rc4`):
+
+### Normal-speed DS audio during fast-forward (optional, off by default)
+*  Adds **Keep audio at normal speed during fast-forward** in **Settings › Audio** (`audio_keep_normal_speed_on_fast_forward`), disabled by default so upstream behavior is preserved unless enabled.
+*  Scales Nintendo DS ARM7 hardware sound timers (`tid >= 4`) and SPU mixing/capture/microphone/blip-buf cycles in [melonDS-android-lib](https://github.com/crowdedmovie/melonDS-android-lib/tree/normal-speed-ff-audio) proportionally to measured emulation speed with adaptive SPU buffer feedback, keeping DS music near normal 1× tempo and pitch while gameplay and graphics stay accelerated.
+*  Leaves DSi mode at the standard 1.0× clock, preserves binary savestate compatibility, and defers to **Mute on fast-forward** when enabled (without overwriting your saved preference).
+*  *Limitation:* because ARM7 sound timers run slower relative to ARM9 during fast-forward, DS titles with tight ARM7-to-ARM9 timing sync or tight streamed audio may experience quirks, which is why the toggle defaults to off.
+
+### In-app language selector & Android per-app locales
+*  Adds **App language** in **Settings › General** (`app_language`) alongside Android 13+ **App languages** system support (`localeConfig` + `AppCompatDelegate.setApplicationLocales`).
+*  Supports switching cleanly between **System default** and any of the 8 bundled locales (`en`, `es`, `fr`, `id`, `it`, `pt-BR`, `ru`, `zh-Hans`) to avoid mixed translations on partially localized languages.
+*  Locked while launched in-game, handles unmatched system regional overrides cleanly, and adds `locale|layoutDirection` configuration handling so active Emulator, Phantom multiplayer, and Layout Editor sessions are not disrupted by external locale changes.
+
+### Side-by-side install & fork update checks
+*  Published as `gitHubNightlyRelease` (**WatermelonDS Fork**, `me.magnum.melondualds.nightly`), installing alongside official WatermelonDS (`me.magnum.melondualds`) without overwriting your existing setup.
+*  In-app GitHub update checks target [crowdedmovie/WatermelonDS/releases](https://github.com/crowdedmovie/WatermelonDS/releases) rather than upstream.
 
 
 # What WatermelonDS adds
@@ -77,9 +98,7 @@ the save file directory is not set. Instead, WatermelonDS will create a save fil
 
 # Releases
 
-Builds are published [here](https://github.com/SapphireRhodonite/melonDS-android/releases). Release candidates are
-marked as pre-releases; they can contain more bugs than usual and you may need to clear your app data to get them to
-work properly after an update.
+Builds for this fork are published [here](https://github.com/crowdedmovie/WatermelonDS/releases) as `WatermelonDS Fork` (`me.magnum.melondualds.nightly`), allowing side-by-side installation next to official WatermelonDS builds.
 
 # Building
 To build the project you will need the Android SDK, NDK, CMake, a JDK 21 toolchain and a Rust toolchain
@@ -88,7 +107,7 @@ To build the project you will need the Android SDK, NDK, CMake, a JDK 21 toolcha
 ## Build steps:
 1.  Clone the project, including submodules with:
     
-    `git clone --recurse-submodules https://github.com/SapphireRhodonite/melonDS-android.git`
+    `git clone --recurse-submodules https://github.com/crowdedmovie/WatermelonDS.git`
 2.  Install the Android SDK, NDK (`28.0.13004108`) and CMake
 3.  Install Rust with [rustup](https://rustup.rs/). If Android Studio does not inherit your shell `PATH`, set the
     `CARGO` and `RUSTUP` environment variables to the executable paths
@@ -107,6 +126,7 @@ If you want to create a release build, you will need to modify your `local.prope
 *  `MELONDS_KEY_PASSWORD=<key_alias_password>`
 
 # Credits
+*  [WatermelonDS](https://github.com/SapphireRhodonite/WatermelonDS) by SapphireRhodonite — upstream fork base
 *  [melonDS](https://github.com/melonDS-emu/melonDS) by Arisotura and contributors — the emulator core
 *  [melonDS Android](https://github.com/rafaelvcaetano/melonDS-android) by rafaelvcaetano
 *  [librashader](https://github.com/SnowflakePowered/librashader) — RetroArch shader preset support
