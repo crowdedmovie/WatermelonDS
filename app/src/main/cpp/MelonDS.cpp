@@ -47,6 +47,7 @@ namespace MelonDSAndroid
         std::atomic_bool fastForwardActive = false;
 
         std::atomic_bool keepAudioNormalSpeedOnFastForward{false};
+        std::atomic_bool soundOutputActive{true};
         std::atomic<float> fastForwardSpeedMultiplier{0.0f};
         std::atomic_bool muteOnFastForward = false;
         std::atomic_bool rendererDebugToolsEnabled = false;
@@ -1610,7 +1611,18 @@ namespace MelonDSAndroid
     {
         return isNormalSpeedFastForwardAudioEligible(isFastForwardActive(),
             isKeepAudioNormalSpeedOnFastForward(), isMuteOnFastForward(),
-            isCurrentConsoleDsMode(), getFastForwardSpeedMultiplier());
+            isCurrentConsoleDsMode(), getFastForwardSpeedMultiplier(),
+            isSoundOutputActive());
+    }
+
+    void setSoundOutputActive(bool active)
+    {
+        soundOutputActive.store(active, std::memory_order_release);
+    }
+
+    bool isSoundOutputActive()
+    {
+        return soundOutputActive.load(std::memory_order_acquire);
     }
 
     void notifySoundClockTimingDiscontinuity()

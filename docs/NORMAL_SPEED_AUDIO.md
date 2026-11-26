@@ -1,7 +1,7 @@
 # Project Specification: Normal-Speed Audio During Fast-Forward
 
 **Project:** WatermelonDS Android fork  
-**Document status:** Proposed / not yet implemented  
+**Document status:** Implemented on Develop (build & unit tests verified; pending on-device physical Android verification)<br>
 **Last researched:** 2026-11-12  
 **Primary test game:** Pokémon Black 2 (Nintendo DS)  
 **Primary test device:** OnePlus Pad 3 (Android, Snapdragon 8 Elite / Adreno 830)  
@@ -219,4 +219,10 @@ Expected default debug output, subject to build changes: `app/build/outputs/apk/
 - Desktop patch: https://github.com/Ssncdevelop/melonDS/blob/ci/keep-music-speed/keep-music-speed.patch
 - WatermelonDS build instructions: https://github.com/SapphireRhodonite/WatermelonDS#building
 
-Keep copyright notices, license files, and patch attribution. WatermelonDS and its melonDS core are GPL-licensed; confirm the obligations and other bundled dependencies before distributing modified binaries. This document is a project plan, not a claim that compatibility or normal-speed audio has already been achieved on Android.
+Keep copyright notices, license files, and patch attribution. WatermelonDS and its melonDS core are GPL-licensed. Confirm the obligations and other bundled dependencies before distributing modified binaries.
+
+## 11. Implementation summary
+
+- Android Audio settings store the DS-only option under `audio_keep_normal_speed_on_fast_forward`, off by default. Mute on Fast Forward takes precedence and preserves the stored value. Android passes the setting through `EmulatorConfiguration` and applies live changes through `MelonEmulator.setKeepAudioNormalSpeedOnFastForward`.
+- `NormalSpeedAudioClock.h` uses an exponential moving average (EMA) to estimate the effective fast-forward ratio. It also smooths the buffer fill error measured by `SPU::GetOutputBufferLevelAndTarget` and uses a deadband to limit clock corrections from small changes in fill.
+- The controller applies the adjusted DS sound clock through `NDS::SetSoundClockRate` and `SPU::SetClockRate`. While normal-speed audio is active, the Android audio output publishes a 1.0× speed hint so SoundTouch does not apply an additional fast-forward adjustment.

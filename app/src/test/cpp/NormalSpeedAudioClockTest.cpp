@@ -16,15 +16,16 @@ void checkNear(double actual, double expected)
 void testEligibility()
 {
     const auto eligible = isNormalSpeedFastForwardAudioEligible;
-    assert(!eligible(false, true, false, true, 2));
-    assert(!eligible(true, false, false, true, 2));
-    assert(!eligible(true, true, true, true, 2));
-    assert(!eligible(true, true, false, false, 2));
+    assert(!eligible(false, true, false, true, 2, true));
+    assert(!eligible(true, false, false, true, 2, true));
+    assert(!eligible(true, true, true, true, 2, true));
+    assert(!eligible(true, true, false, false, 2, true));
+    assert(!eligible(true, true, false, true, 2.0f, false));
     for (float speed : {1.0f, 0.5f, std::numeric_limits<float>::quiet_NaN(),
                         std::numeric_limits<float>::infinity(), -std::numeric_limits<float>::infinity()})
-        assert(!eligible(true, true, false, true, speed));
+        assert(!eligible(true, true, false, true, speed, true));
     for (float speed : {-1.0f, 0.0f, 2.0f, 3.0f, 5.0f})
-        assert(eligible(true, true, false, true, speed));
+        assert(eligible(true, true, false, true, speed, true));
 }
 
 void testFixedPoint()

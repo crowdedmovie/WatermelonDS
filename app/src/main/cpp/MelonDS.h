@@ -277,6 +277,8 @@ namespace MelonDSAndroid {
     extern bool isMuteOnFastForward();
     extern void setKeepAudioNormalSpeedOnFastForward(bool enabled);
     extern bool isKeepAudioNormalSpeedOnFastForward();
+    extern void setSoundOutputActive(bool active);
+    extern bool isSoundOutputActive();
     extern void setFastForwardSpeedMultiplier(float multiplier);
     extern float getFastForwardSpeedMultiplier();
     extern bool isCurrentConsoleDsMode();

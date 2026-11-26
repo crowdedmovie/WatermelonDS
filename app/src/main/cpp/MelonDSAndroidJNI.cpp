@@ -919,7 +919,8 @@ double currentAudioOutputSpeedHint()
             MelonDSAndroid::isKeepAudioNormalSpeedOnFastForward(),
             MelonDSAndroid::isMuteOnFastForward(),
             MelonDSAndroid::isCurrentConsoleDsMode(),
-            MelonDSAndroid::getFastForwardSpeedMultiplier()))
+            MelonDSAndroid::getFastForwardSpeedMultiplier(),
+            MelonDSAndroid::isSoundOutputActive()))
     {
         return 1.0;
     }
@@ -1002,6 +1003,8 @@ Java_me_magnum_melonds_MelonEmulator_setupEmulatorInternal(JNIEnv* env, jobject 
     vulkanDrsEnabled.store(finalEmulatorConfiguration.vulkanDrsEnabled, std::memory_order_release);
     MelonDSAndroid::setKeepAudioNormalSpeedOnFastForward(
         finalEmulatorConfiguration.audioSettings.keepAudioNormalSpeedOnFastForward);
+    MelonDSAndroid::setSoundOutputActive(
+        finalEmulatorConfiguration.audioSettings.soundEnabled && finalEmulatorConfiguration.audioSettings.volume > 0);
     MelonDSAndroid::setMuteOnFastForward(finalEmulatorConfiguration.audioSettings.muteOnFastForward);
     globalCameraManager = env->NewGlobalRef(cameraManager);
 
@@ -3088,7 +3091,8 @@ Java_me_magnum_melonds_MelonEmulator_updateEmulatorConfiguration(JNIEnv* env, jo
     frameskipManualValue.store(sanitizeFrameskipManualValue(newConfiguration.frameskipManualValue),
                                std::memory_order_release);
     vulkanDrsEnabled.store(newConfiguration.vulkanDrsEnabled, std::memory_order_release);
-    // Keep the JNI sound-clock setting until Milestone 2 wires the configuration field.
+    MelonDSAndroid::setKeepAudioNormalSpeedOnFastForward(newConfiguration.audioSettings.keepAudioNormalSpeedOnFastForward);
+    MelonDSAndroid::setSoundOutputActive(newConfiguration.audioSettings.soundEnabled && newConfiguration.audioSettings.volume > 0);
     MelonDSAndroid::setMuteOnFastForward(newConfiguration.audioSettings.muteOnFastForward);
 
     MelonDSAndroid::updateEmulatorConfiguration(std::make_unique<MelonDSAndroid::EmulatorConfiguration>(std::move(newConfiguration)));

@@ -285,6 +285,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     jint consoleType = env->GetIntField(consoleTypeEnum, env->GetFieldID(consoleTypeEnumClass, "consoleType", "I"));
     jboolean soundEnabled = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "soundEnabled", "Z"));
     jboolean muteOnFastForward = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "muteOnFastForward", "Z"));
+    jboolean keepAudioNormalSpeedOnFastForward = env->GetBooleanField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "keepAudioNormalSpeedOnFastForward", "Z"));
     jint volume = env->GetIntField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "volume", "I"));
     jobject audioInterpolationEnum = env->GetObjectField(emulatorConfiguration, env->GetFieldID(emulatorConfigurationClass, "audioInterpolation", "Lme/magnum/melonds/domain/model/AudioInterpolation;"));
     jint audioInterpolation = env->GetIntField(audioInterpolationEnum, env->GetFieldID(audioInterpolationEnumClass, "interpolationValue", "I"));
@@ -337,7 +338,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.audioSettings = MelonDSAndroid::AudioSettings {
         .soundEnabled = (bool) soundEnabled,
         .muteOnFastForward = (bool) muteOnFastForward,
-        .keepAudioNormalSpeedOnFastForward = false, // Milestone 2 wires the Java setting.
+        .keepAudioNormalSpeedOnFastForward = (bool) keepAudioNormalSpeedOnFastForward,
         .volume = volume,
         .audioInterpolation = audioInterpolation,
         .audioBitrate = audioBitrate,

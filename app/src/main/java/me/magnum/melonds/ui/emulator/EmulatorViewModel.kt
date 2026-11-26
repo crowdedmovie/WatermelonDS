@@ -576,6 +576,11 @@ class EmulatorViewModel @Inject constructor(
             }
         }
         viewModelScope.launch {
+            settingsRepository.observeKeepAudioNormalSpeedOnFastForwardEnabled().collectLatest {
+                emulatorManager.setKeepAudioNormalSpeedOnFastForward(it)
+            }
+        }
+        viewModelScope.launch {
             settingsRepository.observeExternalDisplayKeepAspectRationEnabled().collectLatest {
                 _externalDisplayKeepAspectRatioEnabled.value = it
             }

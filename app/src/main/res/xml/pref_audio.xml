@@ -47,6 +47,13 @@
             app:iconSpaceReserved="false"
             android:defaultValue="false" />
 
+    <SwitchPreference
+            android:key="audio_keep_normal_speed_on_fast_forward"
+            android:title="@string/audio_keep_normal_speed_on_fast_forward"
+            android:summary="@string/audio_keep_normal_speed_on_fast_forward_summary"
+            app:iconSpaceReserved="false"
+            android:defaultValue="false" />
+
     <ListPreference
             android:key="audio_latency"
             android:title="@string/audio_latency"
