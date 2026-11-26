@@ -175,4 +175,14 @@ Keep temporary task or branch notes in the thread, existing issue, or PR/MR. If 
 
 ### Repository-Specific Instructions
 
-Add only information relevant to this repository. Omit unused sections and avoid speculative commands or requirements.
+#### Fork Identity, Releases & Versioning
+- **Distributed flavor:** `gitHubNightlyRelease` (`WatermelonDS Fork`, package `me.magnum.melondualds.nightly`), installed side-by-side alongside official WatermelonDS (`me.magnum.melondualds`). Never ship unoptimized Debug APKs (`-O0` + `MELONDS_VULKAN_ENABLE_VALIDATION=1`) for gameplay testing.
+- **Versioning & Git tags:** `v<upstream-base>-fork<N>` (starting with `v0.8.0-rc4-fork1`) and incremented `versionCode` in `buildSrc/src/main/kotlin/AppConfig.kt`.
+- **In-app updater & release asset naming:** `GitHubConstants` and `GitHubApi` target `crowdedmovie/WatermelonDS/releases`. Nightly release asset filenames must contain both `WatermelonDS` (or `melondualds`) and `nightly` (e.g. `WatermelonDS-Fork-v0.8.0-rc4-fork1-nightly.apk`) for `GitHubReleaseSelector.selectNightly` compatibility.
+- **Signing keystore:** Store release keystores outside the repository (`C:\Users\crowdedmovie\.android\watermelonds-release.jks`, alias `watermelonds`) and inject signing fields via gitignored `local.properties` only during local release builds (restore `local.properties` afterward). Never commit `.jks` files or passwords.
+- **Upstream contributions:** Keep fork-specific files (`.agents/`, `AGENTS.md`, `.gitmodules` fork override) off upstream-targeted branches; cherry-pick clean patches onto branches created directly from upstream `Develop` / `DevelopSub`.
+
+#### Verified Windows Build & Test Procedures
+- Always pass session-scoped `ANDROID_NDK_HOME` pointing to NDK `28.0.13004108` (`%LOCALAPPDATA%\Android\Sdk\ndk\28.0.13004108`) and `-Djava.net.preferIPv4Stack=true` for both Gradle client and daemon.
+- JVM unit tests run under release build type (`:app:testGitHubProdReleaseUnitTest`); host native clock tests run via MinGW `g++ -std=c++17 -Wall -Wextra -Werror -I app/src/main/cpp app/src/test/cpp/NormalSpeedAudioClockTest.cpp`.
+- CMake/NDK builds may touch tracked Vulkan SPIR-V headers on Windows; restore them immediately afterward with `git checkout -- app/src/main/cpp/renderer/*ShaderData.h` and `git -C melonDS-android-lib checkout -- "src/GPU3D_Vulkan_*Data.h"`.
