@@ -49,6 +49,7 @@ class SettingsActivity :
 
     override fun onStart() {
         super.onStart()
+        updateTitle()
         externalSettingsTitle.value = supportActionBar?.title?.toString() ?: getString(me.magnum.melonds.R.string.settings)
         supportFragmentManager.addOnBackStackChangedListener(externalTitleListener)
         externalInfoController.setContent {
@@ -166,8 +167,9 @@ class SettingsActivity :
     }
 
     private fun updateTitle() {
-        val fragment = supportFragmentManager.fragments.lastOrNull()
-        if (fragment is PreferenceFragmentTitleProvider) {
+        val fragment = supportFragmentManager.findFragmentById(binding.settingsContainer.id)
+            ?: supportFragmentManager.fragments.lastOrNull()
+        if (fragment is PreferenceFragmentTitleProvider && fragment.isAdded) {
             supportActionBar?.title = fragment.getTitle()
         }
     }
