@@ -10,6 +10,7 @@
 #include "EmulatorArgsBuilder.h"
 #include "MelonDS.h"
 #include "MelonDSAudio.h"
+#include "NormalSpeedAudioClock.h"
 #include "OboeCallback.h"
 #include "MicInputOboeCallback.h"
 #include "OpenGLContext.h"
@@ -45,6 +46,9 @@ namespace MelonDSAndroid
     {
         std::atomic_bool fastForwardActive = false;
 
+        std::atomic_bool keepAudioNormalSpeedOnFastForward{false};
+        std::atomic_bool soundOutputActive{true};
+        std::atomic<float> fastForwardSpeedMultiplier{0.0f};
         std::atomic_bool muteOnFastForward = false;
         std::atomic_bool rendererDebugToolsEnabled = false;
         std::atomic_bool rendererDebugBgObjEnabled = false;
@@ -1575,6 +1579,56 @@ namespace MelonDSAndroid
     bool isFastForwardActive()
     {
         return fastForwardActive.load(std::memory_order_acquire);
+    }
+
+    void setKeepAudioNormalSpeedOnFastForward(bool enabled)
+    {
+        keepAudioNormalSpeedOnFastForward.store(enabled, std::memory_order_release);
+    }
+
+    bool isKeepAudioNormalSpeedOnFastForward()
+    {
+        return keepAudioNormalSpeedOnFastForward.load(std::memory_order_acquire);
+    }
+
+    void setFastForwardSpeedMultiplier(float multiplier)
+    {
+        fastForwardSpeedMultiplier.store(multiplier, std::memory_order_release);
+    }
+
+    float getFastForwardSpeedMultiplier()
+    {
+        return fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+    }
+
+    bool isCurrentConsoleDsMode()
+    {
+        auto currentInstance = GetInstanceSnapshot();
+        return currentInstance && currentInstance->getConsoleType() == 0;
+    }
+
+    bool isNormalSpeedFastForwardAudioActive()
+    {
+        return isNormalSpeedFastForwardAudioEligible(isFastForwardActive(),
+            isKeepAudioNormalSpeedOnFastForward(), isMuteOnFastForward(),
+            isCurrentConsoleDsMode(), getFastForwardSpeedMultiplier(),
+            isSoundOutputActive());
+    }
+
+    void setSoundOutputActive(bool active)
+    {
+        soundOutputActive.store(active, std::memory_order_release);
+    }
+
+    bool isSoundOutputActive()
+    {
+        return soundOutputActive.load(std::memory_order_acquire);
+    }
+
+    void notifySoundClockTimingDiscontinuity()
+    {
+        if (auto currentInstance = GetInstanceSnapshot())
+            currentInstance->notifySoundClockTimingDiscontinuity();
     }
 
     void setMuteOnFastForward(bool enabled)

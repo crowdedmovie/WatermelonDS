@@ -14,6 +14,7 @@
 #include "AudioOutputTelemetry.h"
 #include "Configuration.h"
 #include "ExactLiveGuide.h"
+#include "NormalSpeedAudioClock.h"
 #include "NDS.h"
 #include "MelonDS.h"
 #include "SaveManager.h"
@@ -133,6 +134,8 @@ public:
     AudioOutputControllerSnapshot getAudioOutputControllerSnapshot() const noexcept;
     void setAudioOutputSpeedHint(double speed);
     void configureAudioOutputTransport(std::uint32_t frames, bool lowLatency);
+    int getConsoleType() const noexcept { return nds ? nds->ConsoleType : consoleType; }
+    void notifySoundClockTimingDiscontinuity() noexcept;
     void resetAudioOutputAdaptivo();
     bool takeScreenshot();
     std::vector<u32> getScreenshotPixels();
@@ -417,6 +420,10 @@ private:
 private:
     int instanceId;
     int consoleType;
+    NormalSpeedAudioClock normalSpeedAudioClock;
+    std::atomic_bool soundClockDiscontinuityPending{false};
+    std::uint32_t soundClockDebugLogCounter = 0;
+    void resetSoundClock() noexcept;
     NDS* nds;
     std::array<u8, 6> originalMultiplayerMac{};
     bool multiplayerFirmwareIdentity = false;

@@ -184,6 +184,9 @@
     <string name="bitrate">Débit binaire</string>
     <string name="volume">Volume</string>
     <string name="volume_percentage">%1$d %%</string>
+    <string name="audio_keep_normal_speed_on_fast_forward">Garder l\'audio à vitesse normale en avance rapide</string>
+    <string name="audio_keep_normal_speed_on_fast_forward_summary">Conserve le tempo et la hauteur d\'origine de la musique et des sons pendant l\'avance rapide (mode DS uniquement)</string>
+    <string name="audio_keep_normal_speed_on_fast_forward_summary_muted">Désactivé tant que la coupure du son en avance rapide est activée</string>
     <string name="audio_latency">Latence audio</string>
     <string name="microphone_source">Source du microphone</string>
     <string name="controller_layout">Configuration manette</string>

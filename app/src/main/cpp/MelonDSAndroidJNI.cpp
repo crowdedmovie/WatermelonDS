@@ -31,6 +31,7 @@
 #include <memory>
 #include <MelonDS.h>
 #include <MelonDSAudio.h>
+#include "NormalSpeedAudioClock.h"
 #include <RomGbaSlotConfig.h>
 #include <android/asset_manager_jni.h>
 #include "UriFileHandler.h"
@@ -88,7 +89,6 @@ std::atomic<uint64_t> retroAchievementsBootstrapServiceGeneration{0};
 int observedFrames = 0;
 std::atomic<float> fps{0.0f};
 std::atomic_int targetFps{60};
-std::atomic<float> fastForwardSpeedMultiplier{0.0f};
 std::atomic<float> frameLimitSpeedMultiplier{1.0f};
 
 std::atomic<int> frameskipMode{2};
@@ -97,6 +97,7 @@ std::atomic<int> frameskipManualValue{1};
 std::atomic<bool> vulkanDrsEnabled{false};
 std::atomic_bool limitFps{true};
 std::atomic_bool isFastForwardEnabled{false};
+std::mutex audioOutputSpeedHintMutex;
 
 jobject globalCameraManager;
 MelonDSAndroidCameraHandler* androidCameraHandler;
@@ -911,21 +912,34 @@ double audioOutputSpeedHintForMultiplier(float multiplier)
 
 double currentAudioOutputSpeedHint()
 {
-    const float multiplier = isFastForwardEnabled.load(std::memory_order_acquire)
-        ? fastForwardSpeedMultiplier.load(std::memory_order_acquire)
+    const bool ffActive = MelonDSAndroid::isFastForwardActive();
+    // The scaled SPU clock already produces normal-speed audio.
+    if (MelonDSAndroid::isNormalSpeedFastForwardAudioEligible(
+            ffActive,
+            MelonDSAndroid::isKeepAudioNormalSpeedOnFastForward(),
+            MelonDSAndroid::isMuteOnFastForward(),
+            MelonDSAndroid::isCurrentConsoleDsMode(),
+            MelonDSAndroid::getFastForwardSpeedMultiplier(),
+            MelonDSAndroid::isSoundOutputActive()))
+    {
+        return 1.0;
+    }
+    const float multiplier = ffActive
+        ? MelonDSAndroid::getFastForwardSpeedMultiplier()
         : frameLimitSpeedMultiplier.load(std::memory_order_acquire);
     return audioOutputSpeedHintForMultiplier(multiplier);
 }
 
 void publishCurrentAudioOutputSpeedHint()
 {
+    std::lock_guard<std::mutex> lock(audioOutputSpeedHintMutex);
     MelonDSAndroid::setAudioOutputSpeedHint(currentAudioOutputSpeedHint());
 }
 
 int64_t currentPerformanceHintTargetNs()
 {
     if (isFastForwardEnabled.load(std::memory_order_acquire)) {
-        const float multiplier = fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+        const float multiplier = MelonDSAndroid::getFastForwardSpeedMultiplier();
         if (multiplier > 0)
             return static_cast<int64_t>(FRAME_DURATION_60FPS_NS / multiplier);
         return FRAME_DURATION_1000FPS_NS;
@@ -978,9 +992,7 @@ Java_me_magnum_melonds_MelonEmulator_setupEmulatorInternal(JNIEnv* env, jobject 
     MelonDSAndroid::EmulatorConfiguration finalEmulatorConfiguration = MelonDSAndroidConfiguration::buildEmulatorConfiguration(env, emulatorConfiguration);
     if (env->ExceptionCheck())
         return;
-    fastForwardSpeedMultiplier.store(
-        finalEmulatorConfiguration.fastForwardSpeedMultiplier,
-        std::memory_order_release);
+    MelonDSAndroid::setFastForwardSpeedMultiplier(finalEmulatorConfiguration.fastForwardSpeedMultiplier);
     frameLimitSpeedMultiplier.store(
         sanitizeFrameLimitSpeedMultiplier(finalEmulatorConfiguration.frameLimitSpeedMultiplier),
         std::memory_order_release);
@@ -989,6 +1001,10 @@ Java_me_magnum_melonds_MelonEmulator_setupEmulatorInternal(JNIEnv* env, jobject 
     frameskipManualValue.store(sanitizeFrameskipManualValue(finalEmulatorConfiguration.frameskipManualValue),
                                std::memory_order_release);
     vulkanDrsEnabled.store(finalEmulatorConfiguration.vulkanDrsEnabled, std::memory_order_release);
+    MelonDSAndroid::setKeepAudioNormalSpeedOnFastForward(
+        finalEmulatorConfiguration.audioSettings.keepAudioNormalSpeedOnFastForward);
+    MelonDSAndroid::setSoundOutputActive(
+        finalEmulatorConfiguration.audioSettings.soundEnabled && finalEmulatorConfiguration.audioSettings.volume > 0);
     MelonDSAndroid::setMuteOnFastForward(finalEmulatorConfiguration.audioSettings.muteOnFastForward);
     globalCameraManager = env->NewGlobalRef(cameraManager);
 
@@ -2989,7 +3005,7 @@ Java_me_magnum_melonds_MelonEmulator_setFastForwardEnabled(JNIEnv* env, jobject 
         std::memory_order_acq_rel);
     MelonDSAndroid::setFastForwardActive(fastForwardEnabled);
     if (fastForwardEnabled) {
-        const float multiplier = fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+        const float multiplier = MelonDSAndroid::getFastForwardSpeedMultiplier();
         limitFps = multiplier > 0;
         targetFps = static_cast<int>(60.0f * multiplier);
     } else {
@@ -3034,6 +3050,14 @@ JNIEXPORT void JNICALL
 Java_me_magnum_melonds_MelonEmulator_setMuteOnFastForward(JNIEnv* env, jobject thiz, jboolean enabled)
 {
     MelonDSAndroid::setMuteOnFastForward(enabled == JNI_TRUE);
+    publishCurrentAudioOutputSpeedHint();
+}
+
+JNIEXPORT void JNICALL
+Java_me_magnum_melonds_MelonEmulator_setKeepAudioNormalSpeedOnFastForward(JNIEnv* env, jobject thiz, jboolean enabled)
+{
+    MelonDSAndroid::setKeepAudioNormalSpeedOnFastForward(enabled == JNI_TRUE);
+    publishCurrentAudioOutputSpeedHint();
 }
 
 JNIEXPORT jint JNICALL
@@ -3058,9 +3082,7 @@ Java_me_magnum_melonds_MelonEmulator_updateEmulatorConfiguration(JNIEnv* env, jo
     if (env->ExceptionCheck())
         return;
 
-    fastForwardSpeedMultiplier.store(
-        newConfiguration.fastForwardSpeedMultiplier,
-        std::memory_order_release);
+    MelonDSAndroid::setFastForwardSpeedMultiplier(newConfiguration.fastForwardSpeedMultiplier);
     frameLimitSpeedMultiplier.store(
         sanitizeFrameLimitSpeedMultiplier(newConfiguration.frameLimitSpeedMultiplier),
         std::memory_order_release);
@@ -3069,12 +3091,14 @@ Java_me_magnum_melonds_MelonEmulator_updateEmulatorConfiguration(JNIEnv* env, jo
     frameskipManualValue.store(sanitizeFrameskipManualValue(newConfiguration.frameskipManualValue),
                                std::memory_order_release);
     vulkanDrsEnabled.store(newConfiguration.vulkanDrsEnabled, std::memory_order_release);
+    MelonDSAndroid::setKeepAudioNormalSpeedOnFastForward(newConfiguration.audioSettings.keepAudioNormalSpeedOnFastForward);
+    MelonDSAndroid::setSoundOutputActive(newConfiguration.audioSettings.soundEnabled && newConfiguration.audioSettings.volume > 0);
     MelonDSAndroid::setMuteOnFastForward(newConfiguration.audioSettings.muteOnFastForward);
 
     MelonDSAndroid::updateEmulatorConfiguration(std::make_unique<MelonDSAndroid::EmulatorConfiguration>(std::move(newConfiguration)));
 
     if (isFastForwardEnabled.load(std::memory_order_acquire)) {
-        const float multiplier = fastForwardSpeedMultiplier.load(std::memory_order_acquire);
+        const float multiplier = MelonDSAndroid::getFastForwardSpeedMultiplier();
         limitFps = multiplier > 0;
         targetFps = static_cast<int>(60.0f * multiplier);
     } else {
@@ -3310,6 +3334,7 @@ void* emulate(void*)
             pthread_mutex_unlock(&emuThreadMutex);
             if (resumeCanceled)
                 continue;
+            MelonDSAndroid::notifySoundClockTimingDiscontinuity();
             frameTiming.resumed();
             frameLimitError = 0;
             lastTick = getCurrentMillis();
