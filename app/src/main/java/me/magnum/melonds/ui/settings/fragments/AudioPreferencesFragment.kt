@@ -5,10 +5,13 @@ import android.os.Bundle
 import androidx.activity.result.contract.ActivityResultContracts
 import androidx.appcompat.app.AlertDialog
 import androidx.preference.ListPreference
-import androidx.preference.PreferenceFragmentCompat
 import androidx.preference.SeekBarPreference
+import androidx.preference.SwitchPreference
 import me.magnum.melonds.R
 import me.magnum.melonds.domain.model.MicSource
+import me.magnum.melonds.domain.model.PREF_KEY_KEEP_AUDIO_NORMAL_SPEED_ON_FAST_FORWARD
+import me.magnum.melonds.domain.model.PREF_KEY_MUTE_ON_FAST_FORWARD
+import me.magnum.melonds.domain.model.resolveKeepNormalSpeedPreferenceUiState
 import me.magnum.melonds.extensions.isMicrophonePermissionGranted
 import me.magnum.melonds.ui.settings.PreferenceFragmentTitleProvider
 import me.magnum.melonds.utils.enumValueOfIgnoreCase
@@ -46,7 +49,42 @@ class AudioPreferencesFragment : BasePreferenceFragment(), PreferenceFragmentTit
             }
         }
 
-        hideDependentsWhenInactive("sound_enabled", "audio_interpolation", "audio_bitrate", "volume", "audio_latency")
+        configureFastForwardAudioPreferences()
+    }
+
+    private fun configureFastForwardAudioPreferences() {
+        val soundPreference = findPreference<SwitchPreference>("sound_enabled")!!
+        val mutePreference = findPreference<SwitchPreference>(PREF_KEY_MUTE_ON_FAST_FORWARD)!!
+        val keepNormalSpeedPreference = findPreference<SwitchPreference>(PREF_KEY_KEEP_AUDIO_NORMAL_SPEED_ON_FAST_FORWARD)!!
+
+        fun updateKeepNormalSpeedPreference(soundEnabled: Boolean, muteOnFastForward: Boolean) {
+            val uiState = resolveKeepNormalSpeedPreferenceUiState(soundEnabled, muteOnFastForward)
+            keepNormalSpeedPreference.isVisible = uiState.isVisible
+            keepNormalSpeedPreference.isEnabled = uiState.isEnabled
+            keepNormalSpeedPreference.setSummary(
+                if (uiState.overriddenByMute) R.string.audio_keep_normal_speed_on_fast_forward_summary_muted
+                else R.string.audio_keep_normal_speed_on_fast_forward_summary,
+            )
+        }
+
+        updateKeepNormalSpeedPreference(soundPreference.isChecked, mutePreference.isChecked)
+        soundPreference.setOnPreferenceChangeListener { _, newValue ->
+            updateKeepNormalSpeedPreference(newValue as Boolean, mutePreference.isChecked)
+            true
+        }
+        mutePreference.setOnPreferenceChangeListener { _, newValue ->
+            updateKeepNormalSpeedPreference(soundPreference.isChecked, newValue as Boolean)
+            true
+        }
+        hideDependentsWhenInactive(
+            soundPreference.key,
+            "audio_interpolation",
+            "audio_bitrate",
+            "volume",
+            "audio_latency",
+            PREF_KEY_MUTE_ON_FAST_FORWARD,
+            PREF_KEY_KEEP_AUDIO_NORMAL_SPEED_ON_FAST_FORWARD,
+        )
     }
 
     private fun updateVolumePreferenceSummary(volumePreference: SeekBarPreference, volume: Int) {

@@ -46,6 +46,8 @@ import me.magnum.melonds.domain.model.FirmwareConfiguration
 import me.magnum.melonds.domain.model.FpsCounterPosition
 import me.magnum.melonds.domain.model.MacAddress
 import me.magnum.melonds.domain.model.MicSource
+import me.magnum.melonds.domain.model.PREF_KEY_KEEP_AUDIO_NORMAL_SPEED_ON_FAST_FORWARD
+import me.magnum.melonds.domain.model.PREF_KEY_MUTE_ON_FAST_FORWARD
 import me.magnum.melonds.domain.model.RendererConfiguration
 import me.magnum.melonds.domain.model.RetroArchShaderConfiguration
 import me.magnum.melonds.domain.model.RetroArchShaderSourceResolution
@@ -62,6 +64,7 @@ import me.magnum.melonds.domain.model.resolveThreadedRendering
 import me.magnum.melonds.domain.model.VulkanDriverConfiguration
 import me.magnum.melonds.domain.model.VulkanDriverInfo
 import me.magnum.melonds.domain.model.VulkanDriverMode
+import me.magnum.melonds.domain.model.isKeepAudioNormalSpeedOnFastForwardEnabled
 import me.magnum.melonds.domain.model.camera.DSiCameraSourceType
 import me.magnum.melonds.domain.model.input.SoftInputBehaviour
 import me.magnum.melonds.domain.model.layout.LayoutConfiguration
@@ -367,6 +370,7 @@ class SharedPreferencesSettingsRepository(
                 folderPath = File(context.filesDir, "dldi/sync").absolutePath,
             ),
             muteOnFastForward = isMuteOnFastForwardEnabled(),
+            keepAudioNormalSpeedOnFastForward = isKeepAudioNormalSpeedOnFastForwardEnabled(),
             lowLatencyEnabled = preferences.getBoolean("video_low_latency", false),
             rtcOffsetMinutes = preferences.getInt("rtc_offset_minutes", 0).coerceIn(-1440, 1440),
             wfcSettingsPath = preferences.getString("wfc_settings_file", null),
@@ -1483,11 +1487,21 @@ class SharedPreferencesSettingsRepository(
     }
 
     override fun isMuteOnFastForwardEnabled(): Boolean {
-        return preferences.getBoolean("audio_mute_on_fast_forward", false)
+        return preferences.getBoolean(PREF_KEY_MUTE_ON_FAST_FORWARD, false)
     }
 
     override fun observeMuteOnFastForwardEnabled(): Flow<Boolean> {
-        return getOrCreatePreferenceSharedFlow("audio_mute_on_fast_forward") { isMuteOnFastForwardEnabled() }
+        return getOrCreatePreferenceSharedFlow(PREF_KEY_MUTE_ON_FAST_FORWARD) { isMuteOnFastForwardEnabled() }
+    }
+
+    override fun isKeepAudioNormalSpeedOnFastForwardEnabled(): Boolean {
+        return isKeepAudioNormalSpeedOnFastForwardEnabled(preferences)
+    }
+
+    override fun observeKeepAudioNormalSpeedOnFastForwardEnabled(): Flow<Boolean> {
+        return getOrCreatePreferenceSharedFlow(PREF_KEY_KEEP_AUDIO_NORMAL_SPEED_ON_FAST_FORWARD) {
+            isKeepAudioNormalSpeedOnFastForwardEnabled()
+        }
     }
 
     private fun getRewindPeriod(): Int {

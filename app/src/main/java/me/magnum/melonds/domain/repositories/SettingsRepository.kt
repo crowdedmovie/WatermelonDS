@@ -128,6 +128,8 @@ interface SettingsRepository {
 
     fun isMuteOnFastForwardEnabled(): Boolean
     fun observeMuteOnFastForwardEnabled(): Flow<Boolean>
+    fun isKeepAudioNormalSpeedOnFastForwardEnabled(): Boolean
+    fun observeKeepAudioNormalSpeedOnFastForwardEnabled(): Flow<Boolean>
     fun getAudioLatency(): AudioLatency
     fun getMicSource(): MicSource
     fun observeMicSource(): Flow<MicSource>

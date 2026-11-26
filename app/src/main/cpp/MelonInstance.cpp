@@ -3838,7 +3838,8 @@ u32 MelonInstance::runFrame(bool frameskipSolicitado, u64 wmFrameDeadline)
 
         const float multiplier = getFastForwardSpeedMultiplier();
         const bool eligible = isNormalSpeedFastForwardAudioEligible(fastForwardActive,
-            isKeepAudioNormalSpeedOnFastForward(), isMuteOnFastForward(), nds->ConsoleType == 0, multiplier);
+            isKeepAudioNormalSpeedOnFastForward(), isMuteOnFastForward(), nds->ConsoleType == 0,
+            multiplier, isSoundOutputActive());
         const bool debug = areRendererDebugToolsEnabled();
         int fill = -1;
         u32 target = 0u;

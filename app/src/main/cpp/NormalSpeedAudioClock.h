@@ -20,9 +20,10 @@ inline constexpr double kBufferFeedbackMax = 1.05;
 
 inline bool isNormalSpeedFastForwardAudioEligible(
     bool fastForwardActive, bool keepAudioNormalSpeed, bool muteOnFastForward,
-    bool isDsMode, float fastForwardSpeedMultiplier) noexcept
+    bool isDsMode, float fastForwardSpeedMultiplier, bool soundOutputActive = true) noexcept
 {
     return fastForwardActive && keepAudioNormalSpeed && !muteOnFastForward && isDsMode
+        && soundOutputActive
         && std::isfinite(fastForwardSpeedMultiplier)
         && (fastForwardSpeedMultiplier <= 0.0f || fastForwardSpeedMultiplier > 1.0f);
 }
