@@ -1,5 +1,6 @@
 package me.magnum.melonds.multiplayer.phantom
 
+import android.content.res.Configuration
 import android.os.Bundle
 import android.view.Gravity
 import android.view.ViewGroup
@@ -22,6 +23,7 @@ import me.magnum.melonds.ui.theme.MelonTheme
 
 abstract class PhantomPlayerActivity : EmulatorActivity() {
     private lateinit var player: PhantomPlayer
+    private lateinit var switchButton: Button
 
     override fun onCreate(savedInstanceState: Bundle?) {
         player = PhantomPlayer(this, this is PhantomPrimaryActivity)
@@ -40,13 +42,20 @@ abstract class PhantomPlayerActivity : EmulatorActivity() {
             }
         }
         addContentView(badge, FrameLayout.LayoutParams(wrap, wrap, Gravity.BOTTOM or Gravity.LEFT))
-        val switch = Button(this, null, android.R.attr.borderlessButtonStyle).apply {
+        switchButton = Button(this, null, android.R.attr.borderlessButtonStyle).apply {
             setText(if (player.primary) R.string.phantom_to_peer else R.string.phantom_to_primary)
             isAllCaps = false
             textSize = 12f
             setOnClickListener { player.notify(PhantomPlayer.SWITCH) }
         }
-        addContentView(switch, FrameLayout.LayoutParams(wrap, wrap, Gravity.BOTTOM or Gravity.END))
+        addContentView(switchButton, FrameLayout.LayoutParams(wrap, wrap, Gravity.BOTTOM or Gravity.END))
+    }
+
+    override fun onConfigurationChanged(newConfig: Configuration) {
+        super.onConfigurationChanged(newConfig)
+        if (::switchButton.isInitialized) {
+            switchButton.setText(if (player.primary) R.string.phantom_to_peer else R.string.phantom_to_primary)
+        }
     }
 
     override fun onDestroy() {

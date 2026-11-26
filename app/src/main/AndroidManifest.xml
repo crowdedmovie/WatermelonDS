@@ -44,6 +44,7 @@
         android:appCategory="game"
         android:enableOnBackInvokedCallback="true"
         android:isGame="true"
+        android:localeConfig="@xml/locales_config"
         android:theme="@style/AppTheme">
 
         <meta-data
@@ -94,7 +95,7 @@
         <activity
             android:name=".ui.emulator.EmulatorActivity"
             android:theme="@style/EmulatorTheme"
-            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode|locale|layoutDirection"
             android:launchMode="singleTask"
             android:exported="true">
             <intent-filter>
@@ -106,7 +107,7 @@
         <activity
             android:name=".multiplayer.phantom.PhantomActivity"
             android:launchMode="singleTask"
-            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode|locale|layoutDirection"
             android:exported="false" />
         <service
             android:name=".multiplayer.phantom.PhantomCoordinatorService"
@@ -125,7 +126,7 @@
             android:taskAffinity="${applicationId}.phantom_primary"
             android:excludeFromRecents="true"
             android:theme="@style/EmulatorTheme"
-            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode|locale|layoutDirection"
             android:exported="false" />
         <activity
             android:name=".multiplayer.phantom.PhantomPeerActivity"
@@ -133,7 +134,7 @@
             android:taskAffinity="${applicationId}.phantom_peer"
             android:excludeFromRecents="true"
             android:theme="@style/EmulatorTheme"
-            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode"
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode|locale|layoutDirection"
             android:exported="false" />
         <activity
             android:name=".multiplayer.MultiplayerActivity"
@@ -209,7 +210,7 @@
             android:name=".ui.layouteditor.LayoutEditorActivity"
             android:theme="@style/EmulatorTheme"
             android:label="@string/layout_editor"
-            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode" >
+            android:configChanges="keyboardHidden|orientation|screenSize|screenLayout|smallestScreenSize|keyboard|uiMode|locale|layoutDirection" >
         </activity>
         <activity
             android:name=".ui.backgrounds.BackgroundsActivity"
@@ -254,5 +255,14 @@
             android:name="androidx.work.impl.foreground.SystemForegroundService"
             android:foregroundServiceType="dataSync"
             tools:node="merge" />
+
+        <service
+            android:name="androidx.appcompat.app.AppLocalesMetadataHolderService"
+            android:enabled="false"
+            android:exported="false">
+            <meta-data
+                android:name="autoStoreLocales"
+                android:value="true" />
+        </service>
     </application>
 </manifest>
