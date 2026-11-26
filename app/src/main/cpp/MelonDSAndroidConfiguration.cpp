@@ -337,6 +337,7 @@ MelonDSAndroid::EmulatorConfiguration MelonDSAndroidConfiguration::buildEmulator
     finalEmulatorConfiguration.audioSettings = MelonDSAndroid::AudioSettings {
         .soundEnabled = (bool) soundEnabled,
         .muteOnFastForward = (bool) muteOnFastForward,
+        .keepAudioNormalSpeedOnFastForward = false, // Milestone 2 wires the Java setting.
         .volume = volume,
         .audioInterpolation = audioInterpolation,
         .audioBitrate = audioBitrate,

@@ -1901,8 +1901,21 @@ bool MelonInstance::isWifiClient() const
     return Multiplayer::Active() && nds->Wifi.IsClient();
 }
 
+void MelonInstance::notifySoundClockTimingDiscontinuity() noexcept
+{
+    soundClockDiscontinuityPending.store(true, std::memory_order_release);
+}
+
+void MelonInstance::resetSoundClock() noexcept
+{
+    normalSpeedAudioClock.reset();
+    soundClockDebugLogCounter = 0;
+    if (nds) nds->SetSoundClockRate(1.0);
+}
+
 void MelonInstance::start()
 {
+    resetSoundClock();
     auto cart = nds->NDSCartSlot.GetCart();
     Multiplayer::GameStarted(this, cart == nullptr);
     if (nds->ConsoleType == 1 && cart != nullptr && cart->GetHeader().IsDSiWare() && !currentConfiguration->showBootScreen)
@@ -1928,6 +1941,7 @@ void MelonInstance::start()
 
 void MelonInstance::reset()
 {
+    resetSoundClock();
     inhibirFrameskipVulkan();
     vulkanFrameskipSaltosConsecutivos = 0;
     vulkanFrameskipSaltosPorPantalla[0] = vulkanFrameskipSaltosPorPantalla[1] = 0u;
@@ -3817,6 +3831,34 @@ u32 MelonInstance::runFrame(bool frameskipSolicitado, u64 wmFrameDeadline)
     });
     processExactLiveGuideBeforeRunFrame();
     nds->TraceWMFrameBoundary(MelonDSAndroid::internalFilesDir);
+    if (nds && nds->IsRunning())
+    {
+        if (soundClockDiscontinuityPending.exchange(false, std::memory_order_acq_rel))
+            normalSpeedAudioClock.onTimingDiscontinuity();
+
+        const float multiplier = getFastForwardSpeedMultiplier();
+        const bool eligible = isNormalSpeedFastForwardAudioEligible(fastForwardActive,
+            isKeepAudioNormalSpeedOnFastForward(), isMuteOnFastForward(), nds->ConsoleType == 0, multiplier);
+        const bool debug = areRendererDebugToolsEnabled();
+        int fill = -1;
+        u32 target = 0u;
+        if (eligible)
+            nds->SPU.GetOutputBufferLevelAndTarget(fill, target);
+        const double now = eligible ? std::chrono::duration<double>(
+            std::chrono::steady_clock::now().time_since_epoch()).count() : 0.0;
+        const auto clockResult = normalSpeedAudioClock.update({eligible, multiplier, now, fill, target});
+        nds->SetSoundClockRate(clockResult.soundClockRate);
+        if (debug && (clockResult.transitioned || (clockResult.active && ++soundClockDebugLogCounter % 60u == 0u)))
+        {
+            if (!eligible)
+                nds->SPU.GetOutputBufferLevelAndTarget(fill, target);
+            Log(LogLevel::Info, "AudioPerf[NormalSpeedFF]: active=%d requested=%g measured=%g applied=%g "
+                "fixed=%u fill=%d target=%u skew=%g underruns=%u drops=%u\n",
+                clockResult.active, multiplier, clockResult.measuredRatio, clockResult.appliedRatio,
+                clockResult.soundClockFixed, fill, target, nds->SPU.GetAppliedOutputSkew(),
+                nds->SPU.GetAdaptUnderruns(), nds->SPU.GetAdaptDescartes());
+        }
+    }
     u32 nLines = nds->RunFrame(wmFrameDeadline);
     if (lowLatencyEnabled && currentRenderer == Renderer::Vulkan)
     {
@@ -4104,6 +4146,7 @@ void MelonInstance::handleVulkanRuntimeFailure(const char* reason)
 
 void MelonInstance::stop()
 {
+    resetSoundClock();
     abortExactLiveGuide(
         static_cast<std::uint32_t>(ExactLiveGuide::AbortReason::Stop));
 
@@ -7360,7 +7403,7 @@ bool MelonInstance::loadState(Savestate* state)
     const bool loaded = nds->DoSavestate(state);
     if (loaded)
     {
-
+        resetSoundClock();
         resetAudioOutputAdaptivo();
         nds->ReleaseScreen();
         setBatteryLevels();
